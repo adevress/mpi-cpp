@@ -1,4 +1,4 @@
-project(mpi-cpp)
+project(MPI_CPP)
 cmake_minimum_required(VERSION 2.8)
 
 enable_testing()
@@ -7,7 +7,7 @@ set(VERSION_MAJOR "0")
 set(VERSION_MINOR "1")
 
 option(UNIT_TESTS "Enable or disable unit tests execution" TRUE)
-option(DISABLE_INSTALL "Disable the installation for this component" TRUE)
+option(MPI_CPP_DISABLE_INSTALL "Disable the installation for this component" FALSE)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake
       ${PROJECT_SOURCE_DIR}/CMake/portability
@@ -30,8 +30,8 @@ file(GLOB MPI_CPP_HEADERS_2 ${CMAKE_CURRENT_SOURCE_DIR}/include/mpi-cpp/*/*/*)
 
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/include/ ${BOOST_INCLUDE_DIR} )
 
-if(NOT DISABLE_INSTALL)
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/MPI_CPP DESTINATION ${INCLUDE_INSTALL_DIR}/)
+if(NOT MPI_CPP_DISABLE_INSTALL)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/mpi-cpp DESTINATION ${INCLUDE_INSTALL_DIR}/)
 endif()
 
 add_subdirectory(tests)
