@@ -1,0 +1,38 @@
+
+    ****    UNDER ACTIVE DEVELOPMENT AND INCOMPLETE  ****
+
+# MPI-CPP
+
+  mpi-cpp is a header-only C++ API for MPI (The Message Passing interface)
+
+# DESIGN CONSIDERATIONS
+
+mpi-cpp has been designed as a lightweight header-only C++ interface to MPI. It aims to offer a
+minimalist alternative to Boost.MPI and solve some of its design issues.
+
+mpi-cpp aims to :
+- be header only. No need to recompile boost or anything to support multiples MPI backends ( openmpi, mpich2, mvapich2, intel mpi )
+- follows a "no-compromise" C++ philosophy.
+- Support for MPI_Datatype instead of implicit Boost.Serialization
+- Transparent STL container mapping
+- Transparent STL std::string mapping
+- C++11 move/future support
+
+
+# PLATFORMS and compiler support
+- Tested on IBM BlueGene/Q ( XLC++ )
+- Linux x86_64 ( GCC ) 
+
+
+
+
+# LICENSE
+
+This software and its sources are available under the terms of the license LGPLv2.1 and 
+of the license LGPLv3. 
+
+
+# Author
+Adrien Devresse <adev@adev.name>
+
+
