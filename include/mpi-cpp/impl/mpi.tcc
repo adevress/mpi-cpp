@@ -67,6 +67,8 @@ inline void _mpi_reduce_mapper(const T * ivalue, std::size_t n_value, MPI_Dataty
 }
 
 
+
+
 } //impl
 
 
@@ -238,7 +240,7 @@ inline void mpi_comm::broadcast( T & values, int root){
 
 template <typename T>
 inline void mpi_comm::send(const T & local_value, int dest_node, int tag){
-    impl::_mpi_flaterize<T> flat_aspect(local_value);
+    impl::_mpi_flaterize<T> flat_aspect(const_cast<T&>(local_value));
 
     send(flat_aspect.flat(), flat_aspect.get_flat_size(), dest_node, tag);
 }
@@ -256,11 +258,39 @@ inline void mpi_comm::send(const T * value, std::size_t n_value ,
 
 }
 
+
+inline mpi_comm::message_handle mpi_comm::probe(int src_node, int tag){
+    mpi_comm::message_handle handle;
+
+    if( MPI_Mprobe(src_node, tag, _comm, &(handle._msg), &(handle._status)) != MPI_SUCCESS){
+        throw mpi_exception(ECOMM, "Error during MPI_Mprobe() ");
+    }
+    return handle;
+}
+
 template <typename T>
 inline void mpi_comm::recv(int src_node, int tag, T & value){
     impl::_mpi_flaterize<T> flat_aspect(value);
 
-    recv(src_node, tag, flat_aspect.flat(), flat_aspect.get_flat_size());
+    if(flat_aspect.is_static_size()){
+        recv(src_node, tag, flat_aspect.flat(), flat_aspect.get_flat_size());
+    }else{
+
+    }
+}
+
+template <typename T>
+inline void mpi_comm::recv(const mpi_comm::message_handle &handle, T & value){
+    MPI_Status status;
+    impl::_mpi_flaterize<T> flat_aspect(value);
+
+    flat_aspect.resize(handle.get_size());
+
+    if( MPI_Mrecv(static_cast<void*>(flat_aspect.flat()), handle.get_size(),
+                 impl::_mpi_datatype_mapper(*(flat_aspect.flat())),
+                 const_cast<MPI_Message*>(&(handle._msg)), &status)  != MPI_SUCCESS){
+        throw mpi_exception(ECOMM, "Error during MPI_recv() ");
+    }
 }
 
 

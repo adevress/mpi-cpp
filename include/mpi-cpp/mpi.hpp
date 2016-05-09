@@ -16,8 +16,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  ** ***************************************************************************/
-#ifndef HADOKEN_MPI_COMM_HPP
-#define HADOKEN_MPI_COMM_HPP
+#ifndef MPI_CPP_MPI_HPP
+#define MPI_CPP_MPI_HPP
 
 #include <mpi.h>
 
@@ -27,6 +27,9 @@
 
 namespace mpi {
 
+
+class mpi_comm;
+class mpi_scope_env;
 
 /**
  * @brief mpi environment scoper
@@ -51,6 +54,34 @@ private:
 class mpi_comm : private boost::noncopyable
 {
 public:
+
+    class message_handle{
+    public:
+        message_handle() :
+            _status(),
+            _msg()
+        {
+            _status.MPI_SOURCE = _status.MPI_TAG = _status.MPI_ERROR = -1;
+        }
+
+        int get_tag() const{
+            return _status.MPI_TAG;
+        }
+
+        int get_rank() const{
+            return _status.MPI_SOURCE;
+        }
+
+        std::size_t get_size() const{
+            return static_cast<std::size_t>(_status.count);
+        }
+
+    private:
+        MPI_Status _status;
+        MPI_Message _msg;
+        friend class mpi_comm;
+    };
+
 
     /**
      * @brief mpi_comm
@@ -105,12 +136,25 @@ public:
     inline void send(const T * value, std::size_t n_value ,
                      int dest_node, int tag);
 
+
+    /// check for incoming messages, without actual receipt of them
+    /// @param src_node node if of the sender
+    /// @param tag identity tag of the message
+    /// @return messange_handle associated with the incoming message.
+    ///         It muse be used with recv(message_handle) to recv the associated
+    ///         message
+    inline message_handle probe(int src_node, int tag);
+
+
     /// received data from an other node
     /// @param src node id of the sender
     /// @param tag identity tag
     /// @return value received
     template <typename T>
     inline void recv(int src_node, int tag, T & value);
+
+    template <typename T>
+    inline void recv(const message_handle & handle, T & value);
 
     template <typename T>
     inline void recv(int src_node, int tag, T* value, std::size_t n_value);
@@ -177,7 +221,6 @@ private:
     int _rank;
     int _size;
     MPI_Comm _comm;
-
 };
 
 

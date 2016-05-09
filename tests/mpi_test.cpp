@@ -276,6 +276,58 @@ BOOST_AUTO_TEST_CASE_TEMPLATE( mpi_send_recv_ring, T, test_types )
 
 }
 
+BOOST_AUTO_TEST_CASE( mpi_send_recv_ring_string_probe)
+{
+    mpi_comm runtime;
+
+    if(runtime.size() ==1){
+        std::cout << "Only one single node mpi_send_recv_ring can not be executed\n";
+        return;
+    }
+
+    int rank = runtime.rank();
+    int next_rank = ((rank +1 == runtime.size())?0:rank+1);
+
+
+    std::string buffer;
+
+    if(runtime.is_master()){
+
+        buffer.push_back('a');
+        runtime.send(buffer, next_rank, 42);
+    }
+
+    mpi_comm::message_handle handle = runtime.probe(any_source, any_tag);
+
+    const int sender_rank = ((runtime.is_master() ==false)?(runtime.rank()-1):(runtime.size()-1));
+    BOOST_CHECK_EQUAL(handle.get_tag(), 42);
+    BOOST_CHECK_EQUAL(handle.get_rank(),  sender_rank);
+
+
+    runtime.recv(handle, buffer);
+
+    std::cout << "recv_str_val:" << buffer << "\n";
+
+    if(runtime.is_master() == false){
+        std::string buffer_send(buffer);
+        int pos = runtime.rank()%26;
+
+        for(int i =-1; i < runtime.rank();++i){
+            buffer_send.push_back('a' + pos);
+        }
+        runtime.send(buffer_send, next_rank, 42);
+    }
+
+
+
+    const int actors = ((runtime.is_master())?(runtime.size()):(runtime.rank()));
+
+
+    BOOST_CHECK_EQUAL(buffer.size(), (actors*(actors+1))/2);
+
+}
+
+
 
 
 
