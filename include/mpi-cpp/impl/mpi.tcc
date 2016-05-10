@@ -97,6 +97,36 @@ mpi_scope_env::~mpi_scope_env(){
     }
 }
 
+
+inline mpi_comm::message_handle::message_handle() :
+   _status(),
+   _msg()
+{
+   _status.MPI_SOURCE = _status.MPI_TAG = _status.MPI_ERROR = -1;
+}
+
+
+inline int mpi_comm::message_handle::tag() const{
+                return _status.MPI_TAG;
+}
+
+
+inline int mpi_comm::message_handle::rank() const{
+                return _status.MPI_SOURCE;
+}
+
+
+template<typename T>
+inline std::size_t mpi_comm::message_handle::count() const{
+    int count=0;
+    if( MPI_Get_count(&_status, impl::_mpi_datatype_mapper(T()), &count) != MPI_SUCCESS){
+        throw mpi_exception(ECOMM, "Error during MPI_Get_count() in message_handle ");
+    }
+    return static_cast<std::size_t>(count);
+}
+
+
+
 mpi_comm::mpi_comm() :
     _rank(0),
     _size(0),
@@ -284,9 +314,9 @@ inline void mpi_comm::recv(const mpi_comm::message_handle &handle, T & value){
     MPI_Status status;
     impl::_mpi_flaterize<T> flat_aspect(value);
 
-    flat_aspect.resize(handle.get_size());
+    flat_aspect.resize(handle.count<typename impl::_mpi_flaterize<T>::base_type>());
 
-    if( MPI_Mrecv(static_cast<void*>(flat_aspect.flat()), handle.get_size(),
+    if( MPI_Mrecv(static_cast<void*>(flat_aspect.flat()), handle.count<typename impl::_mpi_flaterize<T>::base_type>(),
                  impl::_mpi_datatype_mapper(*(flat_aspect.flat())),
                  const_cast<MPI_Message*>(&(handle._msg)), &status)  != MPI_SUCCESS){
         throw mpi_exception(ECOMM, "Error during MPI_recv() ");

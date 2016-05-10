@@ -300,8 +300,8 @@ BOOST_AUTO_TEST_CASE( mpi_send_recv_ring_string_probe)
     mpi_comm::message_handle handle = runtime.probe(any_source, any_tag);
 
     const int sender_rank = ((runtime.is_master() ==false)?(runtime.rank()-1):(runtime.size()-1));
-    BOOST_CHECK_EQUAL(handle.get_tag(), 42);
-    BOOST_CHECK_EQUAL(handle.get_rank(),  sender_rank);
+    BOOST_CHECK_EQUAL(handle.tag(), 42);
+    BOOST_CHECK_EQUAL(handle.rank(),  sender_rank);
 
 
     runtime.recv(handle, buffer);

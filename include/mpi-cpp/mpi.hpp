@@ -57,24 +57,28 @@ public:
 
     class message_handle{
     public:
-        message_handle() :
-            _status(),
-            _msg()
-        {
-            _status.MPI_SOURCE = _status.MPI_TAG = _status.MPI_ERROR = -1;
-        }
+        inline message_handle();
 
-        int get_tag() const{
-            return _status.MPI_TAG;
-        }
+        ///
+        /// \brief get_tag
+        /// \return tag associated to the message
+        ///
+        inline int tag() const;
 
-        int get_rank() const{
-            return _status.MPI_SOURCE;
-        }
+        ///
+        /// \brief get_rank
+        /// \return rank of the sending node associated with the message
+        ///
+        inline int rank() const;
 
-        std::size_t get_size() const{
-            return static_cast<std::size_t>(_status.count);
-        }
+        ///
+        /// \brief get_size
+        /// \return number of elements of type T part of the message.
+        ///  In case of T being a container ( vector, string ), get_size() return the number of container elements
+        ///  part of the message
+        ///
+        template<typename T>
+        inline std::size_t count() const;
 
     private:
         MPI_Status _status;
