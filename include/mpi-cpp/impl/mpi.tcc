@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <numeric>
 #include <cerrno>
+#include <iostream>
 
 #include <boost/atomic.hpp>
 #include <boost/array.hpp>
@@ -62,7 +63,7 @@ inline void _mpi_reduce_mapper(const T * ivalue, std::size_t n_value, MPI_Dataty
     if(  MPI_Allreduce(static_cast<const void *>(ivalue),
                                     static_cast<void*>(ovalue),
                                     n_value, data_type, operation, comm) != MPI_SUCCESS){
-        throw mpi_exception(ECOMM, "Error during MPI_Allreduce() ");
+        throw mpi_exception(EIO, "Error during MPI_Allreduce() ");
     }
 }
 
@@ -120,7 +121,7 @@ template<typename T>
 inline std::size_t mpi_comm::message_handle::count() const{
     int count=0;
     if( MPI_Get_count(&_status, impl::_mpi_datatype_mapper(T()), &count) != MPI_SUCCESS){
-        throw mpi_exception(ECOMM, "Error during MPI_Get_count() in message_handle ");
+        throw mpi_exception(EIO, "Error during MPI_Get_count() in message_handle ");
     }
     return static_cast<std::size_t>(count);
 }
@@ -209,7 +210,7 @@ inline void mpi_comm::all_gather(const T* ivalues, std::size_t nvalues, Y* ovalu
 
     if( MPI_Allgather(static_cast<const void*>(ivalues), nvalues, impl::_mpi_datatype_mapper(*ivalues),
                   static_cast<void*>(ovalues), nvalues, impl::_mpi_datatype_mapper(*ovalues), _comm) != MPI_SUCCESS){
-        throw mpi_exception(ECOMM, "Error during MPI_Allgather() ");
+        throw mpi_exception(EIO, "Error during MPI_Allgather() ");
     }
 }
 
@@ -226,7 +227,7 @@ inline void mpi_comm::all_gather(const T* ivalues, std::size_t nvalues,
     if( MPI_Allgatherv(static_cast<const void*>(ivalues), nvalues, impl::_mpi_datatype_mapper(*ivalues),
                   static_cast<void*>(ovalues), &(ovalues_per_node_int[0]), &(offsets[0]),
                   impl::_mpi_datatype_mapper(*ovalues), _comm) != MPI_SUCCESS){
-        throw mpi_exception(ECOMM, "Error during MPI_Allgatherv() ");
+        throw mpi_exception(EIO, "Error during MPI_Allgatherv() ");
     }
 }
 
@@ -239,7 +240,7 @@ inline void mpi_comm::broadcast(T* value, std::size_t nvalues, int root){
 
     if( MPI_Bcast(static_cast<void*>(value), static_cast<int>(nvalues),
                   impl::_mpi_datatype_mapper(*value), root, _comm) != MPI_SUCCESS){
-        throw mpi_exception(ECOMM, "Error during MPI_Bcast() ");
+        throw mpi_exception(EIO, "Error during MPI_Bcast() ");
     }
 }
 
@@ -283,7 +284,7 @@ inline void mpi_comm::send(const T * value, std::size_t n_value ,
     if( MPI_Send(static_cast<void*>(const_cast<T*>(value)), static_cast<int>(n_value),
                    impl::_mpi_datatype_mapper(*value),
                   dest_node, tag, _comm) != MPI_SUCCESS){
-        throw mpi_exception(ECOMM, "Error during MPI_send() ");
+        throw mpi_exception(EIO, "Error during MPI_send() ");
     }
 
 }
@@ -293,7 +294,7 @@ inline mpi_comm::message_handle mpi_comm::probe(int src_node, int tag){
     mpi_comm::message_handle handle;
 
     if( MPI_Mprobe(src_node, tag, _comm, &(handle._msg), &(handle._status)) != MPI_SUCCESS){
-        throw mpi_exception(ECOMM, "Error during MPI_Mprobe() ");
+        throw mpi_exception(EIO, "Error during MPI_Mprobe() ");
     }
     return handle;
 }
@@ -319,7 +320,7 @@ inline void mpi_comm::recv(const mpi_comm::message_handle &handle, T & value){
     if( MPI_Mrecv(static_cast<void*>(flat_aspect.flat()), handle.count<typename impl::_mpi_flaterize<T>::base_type>(),
                  impl::_mpi_datatype_mapper(*(flat_aspect.flat())),
                  const_cast<MPI_Message*>(&(handle._msg)), &status)  != MPI_SUCCESS){
-        throw mpi_exception(ECOMM, "Error during MPI_recv() ");
+        throw mpi_exception(EIO, "Error during MPI_recv() ");
     }
 }
 
@@ -329,14 +330,14 @@ inline void mpi_comm::recv(int src_node, int tag, T* value, std::size_t n_value)
     MPI_Status status;
 
     if( MPI_Recv(static_cast<void*>(value), n_value, impl::_mpi_datatype_mapper(*value), src_node, tag, _comm, &status)  != MPI_SUCCESS){
-        throw mpi_exception(ECOMM, "Error during MPI_recv() ");
+        throw mpi_exception(EIO, "Error during MPI_recv() ");
     }
 }
 
 
 inline void mpi_comm::barrier(){
     if(MPI_Barrier(_comm) != MPI_SUCCESS){
-        throw mpi_exception(ECOMM, "Error during MPI_barrier() ");
+        throw mpi_exception(EIO, "Error during MPI_barrier() ");
     }
 }
 

@@ -98,6 +98,7 @@ inline MPI_Datatype _mpi_datatype_mapper(const std::vector<T> & value){
 
 template<typename T>
 inline MPI_Datatype _mpi_datatype_mapper(const std::string & value){
+    (void) value;
     return MPI_CHAR;
 }
 

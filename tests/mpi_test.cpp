@@ -365,7 +365,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE( mpi_bcast_vec, T, test_types )
     std::vector<T> vec;
 
     if(runtime.is_master()){
-        for(int i=0; i < max_n; ++i){
+        for(std::size_t i=0; i < max_n; ++i){
             vec.push_back(T(i));
         }
     }
@@ -379,7 +379,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE( mpi_bcast_vec, T, test_types )
 
     std::cout << "vec_bcast_size:" << max_n << "\n";
 
-    for(int i=0; i < max_n; ++i){
+    for(std::size_t i=0; i < max_n; ++i){
         BOOST_CHECK_EQUAL(vec[i], T(i));
     }
 

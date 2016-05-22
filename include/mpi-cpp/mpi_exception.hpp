@@ -21,6 +21,7 @@
 
 #include <stdexcept>
 #include <exception>
+#include <cerrno>
 
 class mpi_exception: public std::runtime_error {
 public:

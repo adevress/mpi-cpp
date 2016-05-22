@@ -20,9 +20,9 @@ mpi-cpp aims to :
 
 
 # PLATFORMS and compiler support
-- Tested on IBM BlueGene/Q ( XLC++ )
-- Linux x86_64 ( GCC ) 
-
+- Tested on IBM BlueGene/Q, xlc, MPICH2 1.5
+- Linux x86_64, gcc & clang, MVAPICH2 & MPICH2, 
+- OSX, clang, OpenMPI
 
 
 
