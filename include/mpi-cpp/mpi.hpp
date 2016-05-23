@@ -19,9 +19,14 @@
 #ifndef MPI_CPP_MPI_HPP
 #define MPI_CPP_MPI_HPP
 
+
+
+#include <vector>
+#include <string>
+#include <boost/noncopyable.hpp>
+
 #include <mpi.h>
 
-#include <boost/noncopyable.hpp>
 #include "mpi_exception.hpp"
 
 
