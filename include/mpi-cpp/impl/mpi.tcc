@@ -26,6 +26,8 @@
 #include <cerrno>
 #include <iostream>
 
+#include <unistd.h>
+
 #include <boost/atomic.hpp>
 #include <boost/array.hpp>
 
@@ -108,12 +110,16 @@ inline mpi_comm::message_handle::message_handle() :
 
 
 inline int mpi_comm::message_handle::tag() const{
-                return _status.MPI_TAG;
+    return _status.MPI_TAG;
 }
 
 
 inline int mpi_comm::message_handle::rank() const{
-                return _status.MPI_SOURCE;
+    return _status.MPI_SOURCE;
+}
+
+inline bool mpi_comm::message_handle::is_valid() const{
+    return (_status.MPI_SOURCE != -1);
 }
 
 
@@ -298,6 +304,31 @@ inline mpi_comm::message_handle mpi_comm::probe(int src_node, int tag){
     }
     return handle;
 }
+
+
+inline mpi_comm::message_handle mpi_comm::probe(int src_node, int tag, std::size_t us_time){
+    mpi_comm::message_handle handle;
+    int flag =0;
+
+    while(us_time > 0){
+
+        if( MPI_Improbe(src_node, tag, _comm, &flag, &(handle._msg), &(handle._status)) != MPI_SUCCESS){
+            throw mpi_exception(EIO, "Error during MPI_Mprobe() ");
+        }
+        if(tag){
+            break;
+        }
+
+        usleep(1);
+        us_time--;
+    }
+
+    return handle;
+}
+
+
+
+
 
 template <typename T>
 inline void mpi_comm::recv(int src_node, int tag, T & value){

@@ -80,6 +80,13 @@ public:
         template<typename T>
         inline std::size_t count() const;
 
+
+        ///
+        /// \brief test message_handle validity
+        /// \return return true if message handle is valid, false if the probe operation has been aborted
+        ///
+        inline bool is_valid() const;
+
     private:
         MPI_Status _status;
         MPI_Message _msg;
@@ -142,12 +149,25 @@ public:
 
 
     /// check for incoming messages, without actual receipt of them
-    /// @param src_node node if of the sender
+    /// @param src_node node of the sender
     /// @param tag identity tag of the message
     /// @return messange_handle associated with the incoming message.
     ///         It muse be used with recv(message_handle) to recv the associated
     ///         message
     inline message_handle probe(int src_node, int tag);
+
+    ///
+    /// check for incoming messages, without actual receipt of them
+    /// if not message are received after a specified time, the function
+    /// return an invalid message_handle that need to be tested with
+    /// message_handle::is_valid()
+    ///
+    /// \param src_node node of the sender
+    /// \param tag tag of the message
+    /// \param us_time time in micro seconds
+    /// \return message_handle, validity test is necessary
+    ///
+    inline message_handle probe(int src_node, int tag, std::size_t us_time);
 
 
     /// received data from an other node

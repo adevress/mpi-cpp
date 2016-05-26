@@ -412,3 +412,47 @@ BOOST_AUTO_TEST_CASE( broadcast_str )
 
 }
 
+
+
+BOOST_AUTO_TEST_CASE( mpi_im_probe_test )
+{
+    mpi_comm runtime;
+    const int tag = 56;
+    const std::string str_def = "Hello world! 你好";
+
+    if(runtime.size() ==1){
+        std::cout << "Only one single node, mpi_im_probe_test can not be executed\n";
+        return;
+    }
+
+    runtime.barrier();
+
+    if(runtime.is_master()){
+
+        mpi_comm::message_handle handle =
+                   runtime.probe(1, 56, 3000);
+        BOOST_CHECK(handle.is_valid() == false);
+    }
+
+    if(runtime.rank() == 1){
+        runtime.send(str_def, 0, tag);
+    }
+
+    if(runtime.is_master()){
+        std::string res;
+        mpi_comm::message_handle handle =
+                   runtime.probe(1, 56, 20000000L);
+        BOOST_CHECK(handle.is_valid() == true);
+
+        runtime.recv(handle, res);
+        BOOST_CHECK_EQUAL(res, str_def);
+        std::cout << "probe_recv:" << res << "\n";
+    }
+
+
+    runtime.barrier();
+
+
+
+}
+
