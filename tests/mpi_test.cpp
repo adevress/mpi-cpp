@@ -298,6 +298,7 @@ BOOST_AUTO_TEST_CASE( mpi_send_recv_ring_string_probe)
     }
 
     mpi_comm::message_handle handle = runtime.probe(any_source, any_tag);
+    BOOST_CHECK(handle.is_valid());
 
     const int sender_rank = ((runtime.is_master() ==false)?(runtime.rank()-1):(runtime.size()-1));
     BOOST_CHECK_EQUAL(handle.tag(), 42);
@@ -430,9 +431,11 @@ BOOST_AUTO_TEST_CASE( mpi_im_probe_test )
     if(runtime.is_master()){
 
         mpi_comm::message_handle handle =
-                   runtime.probe(1, 56, 3000);
+                   runtime.probe(1, tag, 3000);
         BOOST_CHECK(handle.is_valid() == false);
     }
+
+    runtime.barrier();
 
     if(runtime.rank() == 1){
         runtime.send(str_def, 0, tag);
@@ -440,8 +443,15 @@ BOOST_AUTO_TEST_CASE( mpi_im_probe_test )
 
     if(runtime.is_master()){
         std::string res;
-        mpi_comm::message_handle handle =
-                   runtime.probe(1, 56, 20000000L);
+	mpi_comm::message_handle handle;
+        BOOST_CHECK(handle.is_valid() == false);
+
+
+	do{
+	        handle =
+	                   runtime.probe(1, tag, 5000);
+	} while(handle.is_valid() == false);
+
         BOOST_CHECK(handle.is_valid() == true);
 
         runtime.recv(handle, res);

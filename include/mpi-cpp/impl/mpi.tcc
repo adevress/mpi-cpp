@@ -28,7 +28,6 @@
 
 #include <unistd.h>
 
-#include <boost/atomic.hpp>
 #include <boost/array.hpp>
 
 #include "../mpi.hpp"
