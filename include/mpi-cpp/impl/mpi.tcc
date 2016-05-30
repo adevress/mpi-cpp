@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <numeric>
+#include <vector>
 #include <cerrno>
 #include <iostream>
 
@@ -55,20 +56,26 @@ inline std::string thread_opt_string(int opt_string){
 }
 
 
+inline void _check_mpi_result(int mpi_res, int err_code,
+                      const std::string & err_msg){
+    if(mpi_res != MPI_SUCCESS){
+        throw mpi_exception(err_code, err_msg);
+    }
+
+}
 
 
 template<typename T>
 inline void _mpi_reduce_mapper(const T * ivalue, std::size_t n_value, MPI_Datatype data_type,
                             MPI_Op operation, const MPI_Comm comm,
                             T* ovalue){
-    if(  MPI_Allreduce(static_cast<const void *>(ivalue),
+    _check_mpi_result(
+                MPI_Allreduce(static_cast<const void *>(ivalue),
                                     static_cast<void*>(ovalue),
-                                    n_value, data_type, operation, comm) != MPI_SUCCESS){
-        throw mpi_exception(EIO, "Error during MPI_Allreduce() ");
-    }
+                                    n_value, data_type, operation, comm),
+                EIO,
+                "Error during MPI_Allreduce() ");
 }
-
-
 
 
 } //impl
@@ -81,9 +88,12 @@ mpi_scope_env::mpi_scope_env(int *argc, char ***argv) : initialized(false){
     if(!initialized){
         const int thread_support= MPI_THREAD_MULTIPLE;
         int provided;
-        if( MPI_Init_thread(argc, argv, thread_support, &provided) != MPI_SUCCESS ){
-            throw mpi_exception(EINVAL, std::string("Unable to init MPI with ") + impl::thread_opt_string(thread_support));
-        }
+
+        impl::_check_mpi_result(
+                    MPI_Init_thread(argc, argv, thread_support, &provided),
+                    EINVAL,
+                    std::string("Unable to init MPI with ") + impl::thread_opt_string(thread_support));
+
         if(provided != thread_support){
             std::cerr << "mpi_scope_env(MPI_Init_thread): MPI Thread level provided (" << impl::thread_opt_string(provided)
                          << ") different of required (" << impl::thread_opt_string(thread_support) << ")\n";
@@ -98,6 +108,105 @@ mpi_scope_env::~mpi_scope_env(){
         MPI_Finalize();
     }
 }
+
+
+template<typename Value>
+inline mpi_comm::mpi_future<Value>::mpi_future() :
+    _v(NULL),
+    _req(MPI_REQUEST_NULL),
+    _status(),
+    _valid(false),
+    _completed(false){}
+
+
+template<typename Value>
+inline mpi_comm::mpi_future<Value>::mpi_future(const mpi_future<Value> & other) :
+    _v(other._v),
+    _req(other._req),
+    _status(other._status),
+    _valid(other._valid),
+    _completed(other._completed)
+{
+    // suppress constness to invalidate old handle
+    // ugly but only way to do it without C++11 movables
+    const_cast<mpi_future<Value> & >(other)._valid = false;
+    const_cast<mpi_future<Value> & >(other)._completed = false;
+}
+
+template<typename Value>
+inline mpi_comm::mpi_future<Value>::~mpi_future(){
+    if(valid() && _req != MPI_REQUEST_NULL){
+        MPI_Request_free(&_req);
+    }
+}
+
+template<typename Value>
+inline Value & mpi_comm::mpi_future<Value>::get(){
+
+    wait();
+    _valid = false;
+    return *_v;
+}
+
+template<typename Value>
+inline void mpi_comm::mpi_future<Value>::wait(){
+    if(!valid()){
+        throw mpi_invalid_future();
+    }
+
+    if(_completed == false){
+        impl::_check_mpi_result(
+                    MPI_Wait(&_req, &_status),
+                    EIO,
+                    "Error during MPI_Wait() in message_handle "
+        );
+        _completed = true;
+    }
+}
+
+
+template<typename Value>
+inline bool mpi_comm::mpi_future<Value>::wait_for(std::size_t us_time){
+    int flag = 0;
+    if(!valid()){
+        throw mpi_invalid_future();
+    }
+
+    if(_completed)
+        return true;
+
+    do{
+        impl::_check_mpi_result(
+            MPI_Test(&_req, &flag,  &_status),
+            EIO,
+            "Invalid MPI_Test(): invalid mpi_future / request /  status ?"
+        );
+        if(flag){
+            _completed = true;
+            return true;
+        }
+
+        if(us_time == 0){
+            return false;
+        }
+
+        usleep(1);
+        us_time -= 1;
+    }while(1);
+
+    // never reached
+    return false;
+}
+
+
+template<typename Value>
+bool mpi_comm::mpi_future<Value>::valid() const{
+    return _valid;
+}
+
+
+
+
 
 
 inline mpi_comm::message_handle::message_handle() :
@@ -125,9 +234,11 @@ inline bool mpi_comm::message_handle::is_valid() const{
 template<typename T>
 inline std::size_t mpi_comm::message_handle::count() const{
     int count=0;
-    if( MPI_Get_count(&_status, impl::_mpi_datatype_mapper(T()), &count) != MPI_SUCCESS){
-        throw mpi_exception(EIO, "Error during MPI_Get_count() in message_handle ");
-    }
+    impl::_check_mpi_result(
+        MPI_Get_count(&_status, impl::_mpi_datatype_mapper(T()), &count),
+        EIO,
+        "Error during MPI_Get_count() in message_handle "
+    );
     return static_cast<std::size_t>(count);
 }
 
@@ -295,6 +406,37 @@ inline void mpi_comm::send(const T * value, std::size_t n_value ,
 }
 
 
+template <typename T>
+inline mpi_comm::mpi_future<T> mpi_comm::send_async(const T & local_value, int dest_node, int tag){
+    impl::_mpi_flaterize<T> flat_aspect(const_cast<T&>(local_value));
+
+    return send_async(flat_aspect.flat(), flat_aspect.get_flat_size(), dest_node, tag);
+}
+
+
+template <typename T>
+inline mpi_comm::mpi_future<T> mpi_comm::send_async(const T * value, std::size_t n_value ,
+                 int dest_node, int tag){
+
+    mpi_future<T> fut;
+
+    impl::_check_mpi_result(
+                MPI_Isend(static_cast<void*>(const_cast<T*>(value)), static_cast<int>(n_value),
+                   impl::_mpi_datatype_mapper(*value),
+                  dest_node, tag, _comm, &(fut._req)),
+                  EIO,
+                 "Error during MPI_send() "
+    );
+
+    fut._valid = true;
+    fut._v = const_cast<T *>(value);
+    return fut;
+}
+
+
+
+
+
 inline mpi_comm::message_handle mpi_comm::probe(int src_node, int tag){
     mpi_comm::message_handle handle;
 
@@ -309,18 +451,18 @@ inline mpi_comm::message_handle mpi_comm::probe(int src_node, int tag, std::size
     mpi_comm::message_handle handle;
     int flag =0;
 
-    while(us_time > 0){
+    do{
 
         if( MPI_Improbe(src_node, tag, _comm, &flag, &(handle._msg), &(handle._status)) != MPI_SUCCESS){
             throw mpi_exception(EIO, "Error during MPI_Mprobe() ");
         }
-        if(tag){
+        if(flag || (us_time == 0)){
             break;
         }
 
         usleep(1);
-        us_time--;
-    }
+        us_time -=1;
+    }while(1);
 
     return handle;
 }
@@ -336,7 +478,7 @@ inline void mpi_comm::recv(int src_node, int tag, T & value){
     if(flat_aspect.is_static_size()){
         recv(src_node, tag, flat_aspect.flat(), flat_aspect.get_flat_size());
     }else{
-
+        throw mpi_exception(ENOSYS, "Operation not supported now");
     }
 }
 
@@ -363,6 +505,59 @@ inline void mpi_comm::recv(int src_node, int tag, T* value, std::size_t n_value)
         throw mpi_exception(EIO, "Error during MPI_recv() ");
     }
 }
+
+
+
+template <typename T>
+inline mpi_comm::mpi_future<T> mpi_comm::recv_async(int src_node, int tag, T & value){
+    impl::_mpi_flaterize<T> flat_aspect(value);
+
+    if(flat_aspect.is_static_size()){
+        return recv_async(src_node, tag, flat_aspect.flat(), flat_aspect.get_flat_size());
+    }else{
+        throw mpi_exception(ENOSYS, "Operation not supported now");
+    }
+}
+
+template <typename T>
+inline mpi_comm::mpi_future<T> mpi_comm::recv_async(const mpi_comm::message_handle &handle, T & value){
+    mpi_comm::mpi_future<T> fut;
+
+    impl::_mpi_flaterize<T> flat_aspect(value);
+
+    flat_aspect.resize(handle.count<typename impl::_mpi_flaterize<T>::base_type>());
+
+    impl::_check_mpi_result(
+                MPI_Imrecv(static_cast<void*>(flat_aspect.flat()), handle.count<typename impl::_mpi_flaterize<T>::base_type>(),
+                    impl::_mpi_datatype_mapper(*(flat_aspect.flat())),
+                    const_cast<MPI_Message*>(&(handle._msg)), &(fut._req)),
+                EIO,
+                "Error during MPI_Imrecv() "
+    );
+
+
+    fut._valid = true;
+    fut._v = &value;
+    return fut;
+
+}
+
+
+template <typename T>
+inline mpi_comm::mpi_future<T> mpi_comm::recv_async(int src_node, int tag, T* value, std::size_t n_value){
+    mpi_comm::mpi_future<T> fut;
+
+    impl::_check_mpi_result(MPI_Irecv(static_cast<void*>(value), n_value, impl::_mpi_datatype_mapper(*value), src_node, tag, _comm, &(fut._req)),
+                            EIO,
+                            "Error during MPI_Irecv() "
+    );
+
+    fut._valid = true;
+    fut._v = value;
+    return fut;
+}
+
+
 
 
 inline void mpi_comm::barrier(){

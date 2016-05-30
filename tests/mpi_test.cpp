@@ -430,8 +430,13 @@ BOOST_AUTO_TEST_CASE( mpi_im_probe_test )
 
     if(runtime.is_master()){
 
+        // check non-blocking version
         mpi_comm::message_handle handle =
-                   runtime.probe(1, tag, 3000);
+                   runtime.probe(1, tag, 0);
+        BOOST_CHECK(handle.is_valid() == false);
+
+        // retry with positive value
+        handle = runtime.probe(1, tag, 2000);
         BOOST_CHECK(handle.is_valid() == false);
     }
 
@@ -462,7 +467,50 @@ BOOST_AUTO_TEST_CASE( mpi_im_probe_test )
 
     runtime.barrier();
 
+}
+
+
+
+BOOST_AUTO_TEST_CASE( mpi_simple_self_async )
+{
+    mpi_comm runtime;
+    std::size_t value = 42, recv_value=0;
+
+    mpi_comm::mpi_future<std::size_t> invalid_future;
+    // any not initialized future should throw if accessed
+    // and be invalid
+    BOOST_CHECK_EQUAL(invalid_future.valid(), false);
+    BOOST_CHECK_THROW({
+                        invalid_future.wait();
+
+                      }, mpi_invalid_future);
+
+
+    mpi_comm::mpi_future<std::size_t> fut_recv
+            = runtime.recv_async(any_source, any_tag, recv_value);
+
+    mpi_comm::mpi_future<std::size_t> fut_send
+            = runtime.send_async(value, runtime.rank(), 2);
+
+
+    fut_send.wait();
+    fut_recv.wait();
+
+    BOOST_CHECK_EQUAL(fut_recv.valid(), true);
+    BOOST_CHECK_EQUAL(fut_send.valid(), true);
+
+    BOOST_CHECK_EQUAL(fut_recv.get(), value);
+
+    BOOST_CHECK_EQUAL(recv_value, value);
+
+    std::cout << "recv_async_val " << recv_value << std::endl;
+
+    // second get() on future should throw
+    BOOST_CHECK_THROW({
+                        const std::size_t val = fut_recv.get();
+                        (void) val;
+
+                      }, mpi_invalid_future);
 
 
 }
-

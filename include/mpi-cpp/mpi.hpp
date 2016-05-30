@@ -60,6 +60,74 @@ class mpi_comm : private boost::noncopyable
 {
 public:
 
+    template<typename Value>
+    class mpi_future{
+    public:
+
+        ///
+        ///  construct a basic mpi_future
+        ///  a mpi_future object is valid() only if returned
+        ///  by an mpi asynchronous operation
+        ///
+        /// \brief mpi_future
+        ///
+        inline mpi_future();
+
+        inline mpi_future(const mpi_future<Value> & f);
+
+        inline virtual ~mpi_future();
+
+        inline Value & get();
+
+
+        ///
+        /// \brief return after the completion of the asynchronous operation
+        ///  throw a mpi_invalid_future if called on an invalid or empty mpi_future
+        ///
+        ///
+        inline void wait();
+
+
+        ///
+        /// \brief return after the completion of the asynchronous operation for
+        ///  a defined time in micro seconds. If the defined time is 0, execute a non blocking test.
+        ///
+        ///  throw a mpi_invalid_future if called on an invalid or empty mpi_future
+        ///
+        /// \return true if completion, false if timeout.
+        ///
+        inline bool wait_for(std::size_t us_time);
+
+
+        ///
+        /// Check the future validity. Only a future returned by an MPI async operation is valid.
+        /// If a valid mpi_future is copied, only the new copy is valid. The original becomes invalid.
+        ///
+        /// \return true if valid, false otherwise
+        ///
+        inline bool valid() const;
+
+
+        static void wait_some(std::vector<mpi_future<Value> > & mpi_futures);
+
+        static void wait_any(std::vector<mpi_future<Value> > & mpi_futures);
+
+        static void test_some(std::vector<mpi_future<Value> > & mpi_futures);
+
+        static void test_any(std::vector<mpi_future<Value> > & mpi_futures);
+
+
+    private:
+        Value *_v;
+        MPI_Request _req;
+        MPI_Status _status;
+        bool _valid, _completed;
+
+        inline mpi_future(Value & v, MPI_Request & req);
+        friend class mpi_comm;
+    };
+
+
     class message_handle{
     public:
         inline message_handle();
@@ -153,7 +221,21 @@ public:
                      int dest_node, int tag);
 
 
+    /// send local_value to node dest asynchronously
+    /// @param local_value value to send
+    /// @param dest node id of the reciver
+    /// @param tag identity tag
+    template <typename T>
+    inline mpi_future<T> send_async(const T & local_value, int dest_node, int tag);
+
+    template <typename T>
+    inline mpi_future<T> send_async(const T * value, std::size_t n_value ,
+                     int dest_node, int tag);
+
+
+
     /// check for incoming messages, without actual receipt of them
+    ///
     /// @param src_node node of the sender
     /// @param tag identity tag of the message
     /// @return messange_handle associated with the incoming message.
@@ -163,9 +245,11 @@ public:
 
     ///
     /// check for incoming messages, without actual receipt of them
-    /// if not message are received after a specified time, the function
+    /// if no message are received after a specified time, the function
     /// return an invalid message_handle that need to be tested with
     /// message_handle::is_valid()
+    ///
+    /// if us_time is 0, a single non-blocking probe is executed
     ///
     /// \param src_node node of the sender
     /// \param tag tag of the message
@@ -187,6 +271,20 @@ public:
 
     template <typename T>
     inline void recv(int src_node, int tag, T* value, std::size_t n_value);
+
+
+    /// received data from an other node asynchronously
+    /// @param src node id of the sender
+    /// @param tag identity tag
+    /// @return value received
+    template <typename T>
+    inline mpi_future<T> recv_async(int src_node, int tag, T & value);
+
+    template <typename T>
+    inline mpi_future<T> recv_async(const message_handle & handle, T & value);
+
+    template <typename T>
+    inline mpi_future<T> recv_async(int src_node, int tag, T* value, std::size_t n_value);
 
 
     /// return gathered information from all nodes

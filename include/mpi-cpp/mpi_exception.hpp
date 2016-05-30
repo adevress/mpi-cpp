@@ -23,15 +23,31 @@
 #include <exception>
 #include <cerrno>
 
+///
+/// \brief generic mpi exception class
+///
 class mpi_exception: public std::runtime_error {
 public:
     inline mpi_exception(int code, const std::string & msg): std::runtime_error(msg), _code(code){}
     inline virtual ~mpi_exception() throw() {}
 
-    int value() const { return _code; }
+    inline int value() const { return _code; }
 
 private:
     int _code;
 };
+
+
+///
+/// \brief The mpi_invalid_future class
+///
+class mpi_invalid_future: public mpi_exception {
+public:
+    inline mpi_invalid_future() :
+        mpi_exception(EINVAL, "wait() or get() executed on invalid mpi_future object"){}
+
+private:
+};
+
 
 #endif // MPI_EXCEPTION_HPP
