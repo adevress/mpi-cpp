@@ -56,6 +56,15 @@ inline std::string thread_opt_string(int opt_string){
 }
 
 
+// Some MPI implementation do not respect the norm and accept only void* instead of const void*
+// for some read only input parameter
+// force conversion to avoid any issue
+template<typename T>
+inline void* _to_void_pointer(const T* orig_ptr){
+	return static_cast<void*>(const_cast<T*>(orig_ptr));
+}
+
+
 inline void _check_mpi_result(int mpi_res, int err_code,
                       const std::string & err_msg){
     if(mpi_res != MPI_SUCCESS){
@@ -70,8 +79,8 @@ inline void _mpi_reduce_mapper(const T * ivalue, std::size_t n_value, MPI_Dataty
                             MPI_Op operation, const MPI_Comm comm,
                             T* ovalue){
     _check_mpi_result(
-                MPI_Allreduce(static_cast<const void *>(ivalue),
-                                    static_cast<void*>(ovalue),
+                MPI_Allreduce(impl::_to_void_pointer(ivalue),
+                                    impl::_to_void_pointer(ovalue),
                                     n_value, data_type, operation, comm),
                 EIO,
                 "Error during MPI_Allreduce() ");
@@ -323,9 +332,10 @@ inline void mpi_comm::all_gather(const T & ivalues, std::vector<Y> & ovalues){
 // all_gather
 template <typename T, typename Y>
 inline void mpi_comm::all_gather(const T* ivalues, std::size_t nvalues, Y* ovalues){
+    using namespace impl;
 
-    if( MPI_Allgather(static_cast<const void*>(ivalues), nvalues, impl::_mpi_datatype_mapper(*ivalues),
-                  static_cast<void*>(ovalues), nvalues, impl::_mpi_datatype_mapper(*ovalues), _comm) != MPI_SUCCESS){
+    if( MPI_Allgather(_to_void_pointer(ivalues), nvalues, impl::_mpi_datatype_mapper(*ivalues),
+                  _to_void_pointer(ovalues), nvalues, impl::_mpi_datatype_mapper(*ovalues), _comm) != MPI_SUCCESS){
         throw mpi_exception(EIO, "Error during MPI_Allgather() ");
     }
 }
@@ -334,15 +344,16 @@ inline void mpi_comm::all_gather(const T* ivalues, std::size_t nvalues, Y* ovalu
 template <typename T, typename Y>
 inline void mpi_comm::all_gather(const T* ivalues, std::size_t nvalues,
                                  Y* ovalues, const std::size_t * ovalues_per_node){
+    using namespace impl;
 
     std::vector<int> offsets(size(), 0), ovalues_per_node_int(ovalues_per_node, ovalues_per_node+ size());
     for(std::size_t i =1; i < offsets.size(); ++i){
         offsets[i] = offsets[i-1] + ovalues_per_node[i-1];
     }
 
-    if( MPI_Allgatherv(static_cast<const void*>(ivalues), nvalues, impl::_mpi_datatype_mapper(*ivalues),
-                  static_cast<void*>(ovalues), &(ovalues_per_node_int[0]), &(offsets[0]),
-                  impl::_mpi_datatype_mapper(*ovalues), _comm) != MPI_SUCCESS){
+    if( MPI_Allgatherv(_to_void_pointer(ivalues), nvalues, _mpi_datatype_mapper(*ivalues),
+                  _to_void_pointer(ovalues), &(ovalues_per_node_int[0]), &(offsets[0]),
+                  _mpi_datatype_mapper(*ovalues), _comm) != MPI_SUCCESS){
         throw mpi_exception(EIO, "Error during MPI_Allgatherv() ");
     }
 }
@@ -353,16 +364,19 @@ inline void mpi_comm::all_gather(const T* ivalues, std::size_t nvalues,
 
 template<typename T>
 inline void mpi_comm::broadcast(T* value, std::size_t nvalues, int root){
+    using namespace impl;
 
-    if( MPI_Bcast(static_cast<void*>(value), static_cast<int>(nvalues),
-                  impl::_mpi_datatype_mapper(*value), root, _comm) != MPI_SUCCESS){
+    if( MPI_Bcast(_to_void_pointer(value), static_cast<int>(nvalues),
+                  _mpi_datatype_mapper(*value), root, _comm) != MPI_SUCCESS){
         throw mpi_exception(EIO, "Error during MPI_Bcast() ");
     }
 }
 
 template<typename T>
 inline void mpi_comm::broadcast( T & values, int root){
-    impl::_mpi_flaterize<T> flatter(values);
+    using namespace impl;
+
+    _mpi_flaterize<T> flatter(values);
 
     std::size_t vec_size;
 
@@ -379,7 +393,7 @@ inline void mpi_comm::broadcast( T & values, int root){
 
     flatter.resize(vec_size);
 
-    broadcast<typename impl::_mpi_flaterize<T>::base_type>(flatter.flat(), vec_size, root);
+    broadcast<typename _mpi_flaterize<T>::base_type>(flatter.flat(), vec_size, root);
 }
 
 
@@ -396,9 +410,10 @@ inline void mpi_comm::send(const T & local_value, int dest_node, int tag){
 template <typename T>
 inline void mpi_comm::send(const T * value, std::size_t n_value ,
                  int dest_node, int tag){
+    using namespace impl;
 
-    if( MPI_Send(static_cast<void*>(const_cast<T*>(value)), static_cast<int>(n_value),
-                   impl::_mpi_datatype_mapper(*value),
+    if( MPI_Send(_to_void_pointer(const_cast<T*>(value)), static_cast<int>(n_value),
+                   _mpi_datatype_mapper(*value),
                   dest_node, tag, _comm) != MPI_SUCCESS){
         throw mpi_exception(EIO, "Error during MPI_send() ");
     }
@@ -418,11 +433,13 @@ template <typename T>
 inline mpi_comm::mpi_future<T> mpi_comm::send_async(const T * value, std::size_t n_value ,
                  int dest_node, int tag){
 
+    using namespace impl;
+
     mpi_future<T> fut;
 
     impl::_check_mpi_result(
-                MPI_Isend(static_cast<void*>(const_cast<T*>(value)), static_cast<int>(n_value),
-                   impl::_mpi_datatype_mapper(*value),
+                MPI_Isend(_to_void_pointer(value), static_cast<int>(n_value),
+                   _mpi_datatype_mapper(*value),
                   dest_node, tag, _comm, &(fut._req)),
                   EIO,
                  "Error during MPI_send() "
