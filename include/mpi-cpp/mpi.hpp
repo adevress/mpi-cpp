@@ -74,6 +74,7 @@ public:
         inline mpi_future();
 
         inline mpi_future(const mpi_future<Value> & f);
+        inline mpi_future<Value> & operator=(const mpi_future<Value> & other);
 
         inline virtual ~mpi_future();
 
@@ -106,6 +107,12 @@ public:
         /// \return true if valid, false otherwise
         ///
         inline bool valid() const;
+
+        ///
+        /// \brief swap two future
+        /// \param future to swap
+        ///
+        void swap(mpi_future<Value> & other);
 
 
         static void wait_some(std::vector<mpi_future<Value> > & mpi_futures);

@@ -138,9 +138,23 @@ inline mpi_comm::mpi_future<Value>::mpi_future(const mpi_future<Value> & other) 
 {
     // suppress constness to invalidate old handle
     // ugly but only way to do it without C++11 movables
-    const_cast<mpi_future<Value> & >(other)._valid = false;
-    const_cast<mpi_future<Value> & >(other)._completed = false;
+    mpi_future<Value> & var_other = const_cast<mpi_future<Value> & >(other);
+    var_other._valid = false;
+    var_other._completed = false;
+    var_other._req = MPI_REQUEST_NULL;
+
 }
+
+template<typename Value>
+inline mpi_comm::mpi_future<Value> & mpi_comm::mpi_future<Value>::operator=(const mpi_comm::mpi_future<Value> & other){
+    if(this != &other){
+        mpi_comm::mpi_future<Value> tmp(other);
+        this->swap(tmp);
+    }
+    return *this;
+}
+
+
 
 template<typename Value>
 inline mpi_comm::mpi_future<Value>::~mpi_future(){
@@ -213,6 +227,18 @@ bool mpi_comm::mpi_future<Value>::valid() const{
     return _valid;
 }
 
+
+template<typename Value>
+void mpi_comm::mpi_future<Value>::swap(mpi_future<Value> &other){
+
+    using std::swap;
+
+    swap(_v, other._v);
+    swap(_req, other._req);
+    swap(_status, other._status);
+    swap(_valid, other._valid);
+    swap(_completed, other._completed);
+}
 
 
 
@@ -532,7 +558,7 @@ inline mpi_comm::mpi_future<T> mpi_comm::recv_async(int src_node, int tag, T & v
     if(flat_aspect.is_static_size()){
         return recv_async(src_node, tag, flat_aspect.flat(), flat_aspect.get_flat_size());
     }else{
-        throw mpi_exception(ENOSYS, "Operation not supported now");
+        throw mpi_exception(ENOSYS, "Operation not supported now, please use probe() for variable size async recv()");
     }
 }
 

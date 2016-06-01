@@ -514,3 +514,126 @@ BOOST_AUTO_TEST_CASE( mpi_simple_self_async )
 
 
 }
+
+
+
+
+
+BOOST_AUTO_TEST_CASE( mpi_non_blocking_self )
+{
+    mpi_comm runtime;
+    std::size_t value = 42, recv_value=0;
+
+
+
+    mpi_comm::mpi_future<std::size_t> fut_recv
+            = runtime.recv_async(any_source, any_tag, recv_value);
+
+    mpi_comm::mpi_future<std::size_t> fut_send
+            = runtime.send_async(value, runtime.rank(), 2);
+
+
+    // due continuous polling without timeout
+    // should work if wait_for execute a MPI_Test even for 0
+    while(fut_recv.wait_for(0) == false);
+
+    BOOST_CHECK_EQUAL(fut_recv.get(), value);
+
+    BOOST_CHECK_EQUAL(recv_value, value);
+
+    std::cout << "recv_async_val " << recv_value << std::endl;
+
+    // second get() on future should throw
+    BOOST_CHECK_THROW({
+                        const std::size_t val = fut_recv.get();
+                        (void) val;
+
+                      }, mpi_invalid_future);
+
+
+}
+
+
+BOOST_AUTO_TEST_CASE( mpi_future_lifetime_check)
+{
+    mpi_comm runtime;
+    std::size_t value = 144, recv_value=0;
+
+
+
+    mpi_comm::mpi_future<std::size_t> other_future;
+
+
+   mpi_comm::mpi_future<std::size_t> fut_recv
+            = runtime.recv_async(any_source, any_tag, recv_value);
+
+
+   // check validity even before operation
+   BOOST_CHECK_EQUAL(fut_recv.valid(), true);
+
+   // and other invalidity
+   BOOST_CHECK_EQUAL(other_future.valid(), false);
+
+   // now we copy recv future to invalid future
+   // invalid
+    other_future = fut_recv;
+
+    // roles are inverted now
+
+    // check validity even before operation
+    BOOST_CHECK_EQUAL(fut_recv.valid(), false);
+
+    // and other invalidity
+    BOOST_CHECK_EQUAL(other_future.valid(), true);
+
+    // wait or on recv should not work
+
+    // second get() on future should throw
+    BOOST_CHECK_THROW({
+                        const std::size_t val = fut_recv.get();
+                        (void) val;
+
+                      }, mpi_invalid_future);
+
+    BOOST_CHECK_THROW({
+                        fut_recv.wait();
+
+                      }, mpi_invalid_future);
+
+
+
+   mpi_comm::mpi_future<std::size_t>
+           fut_send = runtime.send_async(value, runtime.rank(), 2);
+
+
+
+    other_future.wait();
+    fut_send.wait();
+
+    BOOST_CHECK_EQUAL(other_future.valid(), true);
+
+    BOOST_CHECK_EQUAL(other_future.get(), value);
+
+    //
+
+    std::vector< mpi_comm::mpi_future<std::size_t> > vec_future(10);
+
+    for(std::vector<mpi_comm::mpi_future<std::size_t> >::iterator it = vec_future.begin();
+        it < vec_future.end(); ++it){
+        BOOST_CHECK_EQUAL(it->valid(), false);
+    }
+
+    vec_future.push_back(fut_send);
+
+    // fut send has been copied, should now be invalid
+    BOOST_CHECK_EQUAL(fut_send.valid(), false);
+
+    // lets check the result of the copy
+    BOOST_CHECK_EQUAL(vec_future.back().get(), value);
+
+
+
+
+}
+
+
