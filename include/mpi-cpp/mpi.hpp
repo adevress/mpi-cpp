@@ -22,6 +22,7 @@
 
 
 #include <vector>
+#include <bitset>
 #include <string>
 #include <boost/noncopyable.hpp>
 
@@ -46,6 +47,9 @@ public:
     inline mpi_scope_env(int* argc, char*** argv);
 
     inline virtual ~mpi_scope_env();
+
+
+    void enable_exception_report();
 
 private:
     int initialized;
@@ -115,20 +119,63 @@ public:
         void swap(mpi_future<Value> & other);
 
 
-        static void wait_some(std::vector<mpi_future<Value> > & mpi_futures);
+        ///
+        ///  wait for a number 1 to N of mpi_future object to complete
+        ///  Every object return is valid and ready for a get() operation
+        ///
+        ///  Every future returned become invalid in the original buffer
+        ///
+        /// \param mpi_futures
+        /// \return array mpi_future objects completed, ready for get
+        ///
+        static std::vector<mpi_future<Value> > wait_some(std::vector<mpi_future<Value> > & mpi_futures);
 
-        static void wait_any(std::vector<mpi_future<Value> > & mpi_futures);
 
-        static void test_some(std::vector<mpi_future<Value> > & mpi_futures);
+        ///
+        ///  wait for 1  mpi_future object to complete
+        ///  The object return is valid and ready for a get() operation
+        ///
+        ///  the future object returned becomes invalid in the original buffer
+        ///
+        /// \param mpi_futures
+        /// \return mpi_future object completed, ready for get
+        ///
+        static mpi_future<Value> wait_any(std::vector<mpi_future<Value> > & mpi_futures);
 
-        static void test_any(std::vector<mpi_future<Value> > & mpi_futures);
+        ///
+        ///  wait for a number 1 to N of mpi_future object to complete
+        ///  Every object return is valid and ready for a get() operation
+        ///
+        ///  Every future returned become invalid in the original buffer
+        ///
+        ///  Wait for a maximum of us_time microseconds, if us_time is 0. This call act as a non blocking MPI_Test
+        ///
+        /// \param mpi_futures
+        /// \return array mpi_future objects completed, ready for get
+        ///
+        static std::vector<mpi_future<Value> > wait_some_for(std::vector<mpi_future<Value> > & mpi_futures,
+                                                             std::size_t us_time);
+
+        ///
+        ///  wait for 1  mpi_future object to complete
+        ///  The object return is valid and ready for a get() operation
+        ///
+        ///  the future object returned becomes invalid in the original buffer
+        ///
+        ///  Wait for a maximum of us_time microseconds, if us_time is 0. This call act as a non blocking MPI_Test
+        ///
+        /// \param mpi_futures
+        /// \return mpi_future object completed, ready for get
+        ///
+        static mpi_future<Value> wait_any_for(std::vector<mpi_future<Value> > & mpi_futures,
+                                              std::size_t us_time);
 
 
     private:
         Value *_v;
         MPI_Request _req;
         MPI_Status _status;
-        bool _valid, _completed;
+        std::bitset<8> _flags;
 
         inline mpi_future(Value & v, MPI_Request & req);
         friend class mpi_comm;

@@ -90,6 +90,11 @@ inline void _mpi_reduce_mapper(const T * ivalue, std::size_t n_value, MPI_Dataty
 } //impl
 
 
+enum mpi_future_flags{
+    valid_f = 0x0, completed_f = 0x01, own_buffer_f = 0x03
+};
+
+
 
 mpi_scope_env::mpi_scope_env(int *argc, char ***argv) : initialized(false){
     MPI_Initialized(&initialized);
@@ -119,13 +124,19 @@ mpi_scope_env::~mpi_scope_env(){
 }
 
 
+
+void mpi_scope_env::enable_exception_report(){
+    MPI_Comm_set_errhandler(MPI_COMM_WORLD,  MPI_ERRORS_RETURN);
+}
+
+
 template<typename Value>
 inline mpi_comm::mpi_future<Value>::mpi_future() :
-    _v(NULL),
+    _v(),
     _req(MPI_REQUEST_NULL),
     _status(),
-    _valid(false),
-    _completed(false){}
+    _flags()
+{}
 
 
 template<typename Value>
@@ -133,14 +144,12 @@ inline mpi_comm::mpi_future<Value>::mpi_future(const mpi_future<Value> & other) 
     _v(other._v),
     _req(other._req),
     _status(other._status),
-    _valid(other._valid),
-    _completed(other._completed)
+    _flags(other._flags)
 {
     // suppress constness to invalidate old handle
     // ugly but only way to do it without C++11 movables
     mpi_future<Value> & var_other = const_cast<mpi_future<Value> & >(other);
-    var_other._valid = false;
-    var_other._completed = false;
+    var_other._flags.reset();
     var_other._req = MPI_REQUEST_NULL;
 
 }
@@ -158,16 +167,16 @@ inline mpi_comm::mpi_future<Value> & mpi_comm::mpi_future<Value>::operator=(cons
 
 template<typename Value>
 inline mpi_comm::mpi_future<Value>::~mpi_future(){
-    if(valid() && _req != MPI_REQUEST_NULL){
-        MPI_Request_free(&_req);
+    if(valid() && _flags[completed_f] == false){
+       wait();
     }
 }
 
 template<typename Value>
 inline Value & mpi_comm::mpi_future<Value>::get(){
-
     wait();
-    _valid = false;
+
+    _flags[valid_f] = false;
     return *_v;
 }
 
@@ -177,13 +186,13 @@ inline void mpi_comm::mpi_future<Value>::wait(){
         throw mpi_invalid_future();
     }
 
-    if(_completed == false){
+    if(_flags[completed_f] == false){
         impl::_check_mpi_result(
-                    MPI_Wait(&_req, &_status),
+                    MPI_Wait(&_req, MPI_STATUS_IGNORE),
                     EIO,
                     "Error during MPI_Wait() in message_handle "
         );
-        _completed = true;
+        _flags[completed_f] = true;
     }
 }
 
@@ -195,17 +204,17 @@ inline bool mpi_comm::mpi_future<Value>::wait_for(std::size_t us_time){
         throw mpi_invalid_future();
     }
 
-    if(_completed)
+    if(_flags[completed_f])
         return true;
 
     do{
         impl::_check_mpi_result(
-            MPI_Test(&_req, &flag,  &_status),
+            MPI_Test(&_req, &flag,  MPI_STATUS_IGNORE),
             EIO,
             "Invalid MPI_Test(): invalid mpi_future / request /  status ?"
         );
         if(flag){
-            _completed = true;
+            _flags[completed_f] = true;
             return true;
         }
 
@@ -224,7 +233,7 @@ inline bool mpi_comm::mpi_future<Value>::wait_for(std::size_t us_time){
 
 template<typename Value>
 bool mpi_comm::mpi_future<Value>::valid() const{
-    return _valid;
+    return _flags[valid_f];
 }
 
 
@@ -236,8 +245,7 @@ void mpi_comm::mpi_future<Value>::swap(mpi_future<Value> &other){
     swap(_v, other._v);
     swap(_req, other._req);
     swap(_status, other._status);
-    swap(_valid, other._valid);
-    swap(_completed, other._completed);
+    swap(_flags, other._flags);
 }
 
 
@@ -471,7 +479,7 @@ inline mpi_comm::mpi_future<T> mpi_comm::send_async(const T * value, std::size_t
                  "Error during MPI_send() "
     );
 
-    fut._valid = true;
+    fut._flags[valid_f] = true;
     fut._v = const_cast<T *>(value);
     return fut;
 }
@@ -579,7 +587,7 @@ inline mpi_comm::mpi_future<T> mpi_comm::recv_async(const mpi_comm::message_hand
     );
 
 
-    fut._valid = true;
+    fut._flags[valid_f] = true;
     fut._v = &value;
     return fut;
 
@@ -595,7 +603,7 @@ inline mpi_comm::mpi_future<T> mpi_comm::recv_async(int src_node, int tag, T* va
                             "Error during MPI_Irecv() "
     );
 
-    fut._valid = true;
+    fut._flags[valid_f] = true;
     fut._v = value;
     return fut;
 }

@@ -33,7 +33,7 @@ using namespace mpi;
 
 struct MpiFixture{
     MpiFixture():  _env(&argc, &argv){
-
+        _env.enable_exception_report();
     }
 
     ~MpiFixture(){
@@ -503,6 +503,8 @@ BOOST_AUTO_TEST_CASE( mpi_simple_self_async )
 
     BOOST_CHECK_EQUAL(recv_value, value);
 
+    fut_send.get();
+
     std::cout << "recv_async_val " << recv_value << std::endl;
 
     // second get() on future should throw
@@ -524,6 +526,7 @@ BOOST_AUTO_TEST_CASE( mpi_non_blocking_self )
     mpi_comm runtime;
     std::size_t value = 42, recv_value=0;
 
+    runtime.barrier();
 
 
     mpi_comm::mpi_future<std::size_t> fut_recv
@@ -536,6 +539,7 @@ BOOST_AUTO_TEST_CASE( mpi_non_blocking_self )
     // due continuous polling without timeout
     // should work if wait_for execute a MPI_Test even for 0
     while(fut_recv.wait_for(0) == false);
+    fut_send.wait();
 
     BOOST_CHECK_EQUAL(fut_recv.get(), value);
 
@@ -550,8 +554,11 @@ BOOST_AUTO_TEST_CASE( mpi_non_blocking_self )
 
                       }, mpi_invalid_future);
 
+    runtime.barrier();
 
 }
+
+
 
 
 BOOST_AUTO_TEST_CASE( mpi_future_lifetime_check)
@@ -559,7 +566,7 @@ BOOST_AUTO_TEST_CASE( mpi_future_lifetime_check)
     mpi_comm runtime;
     std::size_t value = 144, recv_value=0;
 
-
+    runtime.barrier();
 
     mpi_comm::mpi_future<std::size_t> other_future;
 
@@ -631,9 +638,56 @@ BOOST_AUTO_TEST_CASE( mpi_future_lifetime_check)
     // lets check the result of the copy
     BOOST_CHECK_EQUAL(vec_future.back().get(), value);
 
-
-
+    runtime.barrier();
 
 }
+
+
+
+BOOST_AUTO_TEST_CASE( mpi_async_multiple_simpl)
+{
+
+
+    mpi_comm runtime;
+    const std::size_t n_send = 200;
+
+
+    runtime.barrier();
+
+    std::vector<std::size_t> values_send(n_send);
+    std::vector< mpi_comm::mpi_future<size_t> > send_futures(n_send);
+
+    std::vector<std::size_t> values_recv(n_send, 0);
+    std::vector< mpi_comm::mpi_future<size_t> > recv_futures(n_send);
+
+    const int dest_node = (runtime.rank()+1 == runtime.size() )?(0):(runtime.rank()+1);
+
+    for(std::size_t i =0; i < n_send; ++i){
+        values_send[i] = i;
+        send_futures[i] = runtime.send_async(values_send[i], dest_node, 42);
+    }
+
+    for(std::size_t i =0; i < n_send; ++i){
+        recv_futures[i] = runtime.recv_async(any_source, 42, values_recv[i]);
+    }
+
+    for(std::size_t i = 0; i < n_send; ++i){
+        send_futures[i].wait();
+        recv_futures[i].wait();
+    }
+
+
+    std::size_t sum_recv= std::accumulate(values_recv.begin(), values_recv.end(), 0);
+    std::size_t sum_send= std::accumulate(values_send.begin(), values_send.end(), 0);
+
+    BOOST_CHECK_EQUAL(sum_recv, sum_send);
+
+    std::cout << "sum_async_all:" << sum_recv << " " << sum_send << "\n";
+
+
+
+    runtime.barrier();
+}
+
 
 
