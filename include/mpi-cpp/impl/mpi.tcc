@@ -130,6 +130,7 @@ void mpi_scope_env::enable_exception_report(){
 }
 
 
+
 template<typename Value>
 inline mpi_comm::mpi_future<Value>::mpi_future() :
     _v(),
@@ -172,6 +173,12 @@ inline mpi_comm::mpi_future<Value>::~mpi_future(){
     }
 }
 
+
+template<typename Value>
+inline void mpi_comm::mpi_future<Value>::set_completed(){
+    _flags[completed_f] = true;
+}
+
 template<typename Value>
 inline Value & mpi_comm::mpi_future<Value>::get(){
     wait();
@@ -192,7 +199,7 @@ inline void mpi_comm::mpi_future<Value>::wait(){
                     EIO,
                     "Error during MPI_Wait() in message_handle "
         );
-        _flags[completed_f] = true;
+        set_completed();
     }
 }
 
@@ -214,7 +221,7 @@ inline bool mpi_comm::mpi_future<Value>::wait_for(std::size_t us_time){
             "Invalid MPI_Test(): invalid mpi_future / request /  status ?"
         );
         if(flag){
-            _flags[completed_f] = true;
+            set_completed();
             return true;
         }
 
@@ -248,6 +255,88 @@ void mpi_comm::mpi_future<Value>::swap(mpi_future<Value> &other){
     swap(_flags, other._flags);
 }
 
+
+template<typename Value>
+std::vector<mpi_comm::mpi_future<Value> > mpi_comm::mpi_future<Value>::wait_some(std::vector<mpi_comm::mpi_future<Value> > & mpi_futures){
+    std::vector<mpi_comm::mpi_future<Value> > res;
+
+    const std::size_t n_reqs = mpi_futures.size();
+    int outcount=0, incount = static_cast<int>(n_reqs);
+
+    if(n_reqs == 0)
+        return res;
+
+    std::vector<MPI_Request> reqs(n_reqs);
+    std::vector<int> array_indices(n_reqs);
+    std::vector<MPI_Status> array_status(n_reqs);
+
+    for(std::size_t i =0; i < n_reqs; ++i){
+        reqs[i] = mpi_futures[i]._req;
+    }
+
+    impl::_check_mpi_result(
+                MPI_Waitsome(incount, &(reqs[0]), &outcount, &(array_indices[0]), &(array_status[0])),
+                EIO,
+                "Error during MPI_Waitsome()");
+
+    res.reserve(outcount);
+
+    for(std::size_t i =0; i < outcount; ++i){
+        mpi_futures[i].set_completed();
+        res.push_back(mpi_futures[i]);
+    }
+
+    return res;
+}
+
+
+
+template<typename Value>
+mpi_comm::mpi_future<Value>  mpi_comm::mpi_future<Value>::wait_any(std::vector<mpi_comm::mpi_future<Value> > & mpi_futures){
+    mpi_comm::mpi_future<Value> res;
+
+    const std::size_t n_reqs = mpi_futures.size();
+    int incount = static_cast<int>(n_reqs);
+
+    if(n_reqs == 0)
+        return res;
+
+    std::vector<MPI_Request> reqs(n_reqs);
+    int index =0;
+    MPI_Status status;
+
+    for(std::size_t i =0; i < n_reqs; ++i){
+        reqs[i] = mpi_futures[i]._req;
+    }
+
+    impl::_check_mpi_result(
+                MPI_Waitany(incount, &(reqs[0]), &index, &(status)),
+                EIO,
+                "Error during MPI_Waitsome()");
+
+    res = reqs[index];
+    return res;
+}
+
+
+
+
+template<typename Value>
+std::vector<mpi_comm::mpi_future<Value> > mpi_comm::mpi_future<Value>::filter_invalid(std::vector<mpi_comm::mpi_future<Value> > & mpi_futures){
+    std::vector< mpi_comm::mpi_future<Value> > res, tmp;
+
+    tmp.swap(mpi_futures);
+    res.reserve(tmp.size());
+
+
+    for(std::size_t i =0; i < tmp.size(); ++i){
+        if(tmp[i].valid()){
+            res.push_back(tmp[i]);
+        }
+    }
+
+    return res;
+}
 
 
 

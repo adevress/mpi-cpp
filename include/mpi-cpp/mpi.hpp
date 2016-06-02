@@ -171,6 +171,18 @@ public:
                                               std::size_t us_time);
 
 
+        ///
+        /// return all valid mpi_futures present in mpi_futures_vec. All invalid mpi_futures are destroyed
+        ///
+        /// mpi_future_vec is purged at the end of the operation
+        ///
+        ///
+        /// \param mpi_futures
+        /// \return all valid mpi_futures contained in mpi_futures_vec
+        ///
+        static std::vector<mpi_future<Value> > filter_invalid(std::vector<mpi_future<Value> > & mpi_futures_vec);
+
+
     private:
         Value *_v;
         MPI_Request _req;
@@ -179,6 +191,8 @@ public:
 
         inline mpi_future(Value & v, MPI_Request & req);
         friend class mpi_comm;
+
+        inline void set_completed();
     };
 
 
