@@ -314,7 +314,7 @@ mpi_comm::mpi_future<Value>  mpi_comm::mpi_future<Value>::wait_any(std::vector<m
                 EIO,
                 "Error during MPI_Waitsome()");
 
-    res = reqs[index];
+    res = mpi_futures[index];
     return res;
 }
 
