@@ -37,6 +37,7 @@ struct MpiFixture{
     }
 
     ~MpiFixture(){
+        std::cout << "deletion env" << std::endl;
 
     }
 
@@ -742,6 +743,63 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_some)
 }
 
 
+BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_some_for)
+{
+
+
+    mpi_comm runtime;
+    const std::size_t n_send = 1000;
+
+
+    runtime.barrier();
+
+    std::vector<std::size_t> values_send(n_send);
+
+    std::vector< mpi_comm::mpi_future<size_t> > futures;
+
+    std::vector<std::size_t> values_recv(n_send, 0);
+
+    const int dest_node = (runtime.rank()+1 == runtime.size() )?(0):(runtime.rank()+1);
+
+    for(std::size_t i =0; i < n_send; ++i){
+        values_send[i] = i;
+        futures.push_back(runtime.send_async(values_send[i], dest_node, 43) );
+
+        futures.push_back(runtime.recv_async(any_source, 43, values_recv[i]) );
+    }
+
+
+    std::vector< mpi_comm::mpi_future<size_t> >  completed_futures;
+
+    while(futures.size() > 0){
+
+       std::vector< mpi_comm::mpi_future<size_t> > triggered;
+
+       do{
+            // start non blocking and increase time
+            int i=0;
+            triggered  = mpi_comm::mpi_future<size_t>::wait_some_for(futures, i);
+            i++;
+       } while(triggered.size() == 0);
+
+       std::cout << "multiple_wait_some_for:" << triggered.size() << "\n";
+
+       completed_futures.insert(completed_futures.end(), triggered.begin(), triggered.end());
+
+       futures = mpi_comm::mpi_future<size_t>::filter_invalid(futures);
+
+       std::cout << "multiple_wait_some_for_remaining:" << futures.size() << "\n";
+    }
+
+
+    std::size_t sum_recv= std::accumulate(values_recv.begin(), values_recv.end(), 0);
+    std::size_t sum_send= std::accumulate(values_send.begin(), values_send.end(), 0);
+
+    BOOST_CHECK_EQUAL(sum_recv, sum_send);
+
+    runtime.barrier();
+}
+
 
 
 BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_any)
@@ -795,7 +853,6 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_any)
 
     runtime.barrier();
 }
-
 
 
 

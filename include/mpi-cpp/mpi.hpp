@@ -167,8 +167,9 @@ public:
         /// \param mpi_futures
         /// \return mpi_future object completed, ready for get
         ///
-        static mpi_future<Value> wait_any_for(std::vector<mpi_future<Value> > & mpi_futures,
-                                              std::size_t us_time);
+       static bool wait_any_for(
+                std::vector<mpi_comm::mpi_future<Value> > & mpi_futures,
+                 mpi_comm::mpi_future<Value> & result, std::size_t us_time);
 
 
         ///

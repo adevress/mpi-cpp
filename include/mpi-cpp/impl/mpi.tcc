@@ -290,6 +290,56 @@ std::vector<mpi_comm::mpi_future<Value> > mpi_comm::mpi_future<Value>::wait_some
 }
 
 
+template<typename Value>
+std::vector<mpi_comm::mpi_future<Value> > mpi_comm::mpi_future<Value>::wait_some_for(
+        std::vector<mpi_comm::mpi_future<Value> > & mpi_futures,
+        std::size_t us_time){
+
+    std::vector<mpi_comm::mpi_future<Value> > res;
+
+    const std::size_t n_reqs = mpi_futures.size();
+    int outcount=0, incount = static_cast<int>(n_reqs);
+
+    if(n_reqs == 0)
+        return res;
+
+    std::vector<MPI_Request> reqs(n_reqs);
+    std::vector<int> array_indices(n_reqs);
+    std::vector<MPI_Status> array_status(n_reqs);
+
+    for(std::size_t i =0; i < n_reqs; ++i){
+        reqs[i] = mpi_futures[i]._req;
+    }
+
+    do{
+        impl::_check_mpi_result(
+                    MPI_Testsome(incount, &(reqs[0]), &outcount, &(array_indices[0]), &(array_status[0])),
+                    EIO,
+                    "Error during MPI_Testsome()");
+
+        if(outcount > 0)
+            break;
+        if(us_time ==0){
+            return res;
+        }
+
+        us_time -= 1;
+        usleep(1);
+    } while(1);
+
+
+    res.reserve(outcount);
+
+    for(std::size_t i =0; i < outcount; ++i){
+        mpi_futures[i].set_completed();
+        res.push_back(mpi_futures[i]);
+    }
+
+    return res;
+}
+
+
+
 
 template<typename Value>
 mpi_comm::mpi_future<Value>  mpi_comm::mpi_future<Value>::wait_any(std::vector<mpi_comm::mpi_future<Value> > & mpi_futures){
@@ -315,7 +365,51 @@ mpi_comm::mpi_future<Value>  mpi_comm::mpi_future<Value>::wait_any(std::vector<m
                 "Error during MPI_Waitsome()");
 
     res = mpi_futures[index];
+    res.set_completed();
     return res;
+}
+
+
+
+template<typename Value>
+bool  mpi_comm::mpi_future<Value>::wait_any_for(
+        std::vector<mpi_comm::mpi_future<Value> > & mpi_futures,
+         mpi_comm::mpi_future<Value> & result, std::size_t us_time){
+
+    const std::size_t n_reqs = mpi_futures.size();
+    int incount = static_cast<int>(n_reqs);
+
+    if(n_reqs == 0)
+        return false;
+
+    std::vector<MPI_Request> reqs(n_reqs);
+    int index = 0, flag = 0;
+    MPI_Status status;
+
+    for(std::size_t i =0; i < n_reqs; ++i){
+        reqs[i] = mpi_futures[i]._req;
+    }
+
+    do{
+        impl::_check_mpi_result(
+                    MPI_Testany(incount, &(reqs[0]), &index, &flag, &(status)),
+                    EIO,
+                    "Error during MPI_Testany()");
+
+        if(index > 0)
+            break;
+        if(us_time ==0){
+            return false;
+        }
+
+        us_time -= 1;
+        usleep(1);
+
+    } while(1);
+
+    result = mpi_futures[index];
+    result.set_completed();
+    return true;
 }
 
 
