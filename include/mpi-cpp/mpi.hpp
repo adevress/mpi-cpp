@@ -49,11 +49,156 @@ public:
     inline virtual ~mpi_scope_env();
 
 
-    void enable_exception_report();
+    inline void enable_exception_report();
 
 private:
     int initialized;
 };
+
+
+///
+/// \brief mpi_future represent the state of an asynchronous MPI request
+///
+///  follows the C++11 std::future pattern and conventions
+///
+template<typename Value>
+class mpi_future{
+public:
+
+    typedef typename std::vector<mpi_future<Value> > mpi_future_vec;
+    typedef typename mpi_future_vec::iterator mpi_future_vec_it;
+
+
+    ///
+    ///  construct a basic mpi_future
+    ///  a mpi_future object is valid() only if returned
+    ///  by an mpi asynchronous operation
+    ///
+    /// \brief mpi_future
+    ///
+    inline mpi_future();
+
+    inline mpi_future(const mpi_future<Value> & f);
+    inline mpi_future<Value> & operator=(const mpi_future<Value> & other);
+
+    inline virtual ~mpi_future();
+
+    inline Value & get();
+
+
+    ///
+    /// \brief return after the completion of the asynchronous operation
+    ///  throw a mpi_invalid_future if called on an invalid or empty mpi_future
+    ///
+    ///
+    inline void wait();
+
+
+    ///
+    /// \brief return after the completion of the asynchronous operation for
+    ///  a defined time in micro seconds. If the defined time is 0, execute a non blocking test.
+    ///
+    ///  throw a mpi_invalid_future if called on an invalid or empty mpi_future
+    ///
+    /// \return true if completion, false if timeout.
+    ///
+    inline bool wait_for(std::size_t us_time);
+
+
+    ///
+    /// Check the future validity. Only a future returned by an MPI async operation is valid.
+    /// If a valid mpi_future is copied, only the new copy is valid. The original becomes invalid.
+    ///
+    /// \return true if valid, false otherwise
+    ///
+    inline bool valid() const;
+
+    ///
+    /// \brief swap two future
+    /// \param future to swap
+    ///
+    void swap(mpi_future<Value> & other);
+
+
+    ///
+    ///  wait for a number 1 to N of mpi_future object to complete
+    ///  Every object return is valid and ready for a get() operation
+    ///
+    ///  Every future returned become invalid in the original buffer
+    ///
+    /// \param mpi_futures
+    /// \return array of iterator to completed futures
+    ///
+    static std::vector< mpi_future_vec_it > wait_some(mpi_future_vec & mpi_futures);
+
+
+    ///
+    ///  wait for 1  mpi_future object to complete
+    ///  The object return is valid and ready for a get() operation
+    ///
+    ///  the future object returned becomes invalid in the original buffer
+    ///
+    /// \param mpi_futures
+    /// \return mpi_future object completed, ready for get
+    ///
+    static mpi_future<Value> wait_any(mpi_future_vec & mpi_futures);
+
+    ///
+    ///  wait for a number 1 to N of mpi_future object to complete
+    ///  Every object return is valid and ready for a get() operation
+    ///
+    ///  Every future returned become invalid in the original buffer
+    ///
+    ///  Wait for a maximum of us_time microseconds, if us_time is 0. This call act as a non blocking MPI_Test
+    ///
+    /// \param mpi_futures
+    /// \return array of iterator to completed futures
+    ///
+    static std::vector< mpi_future_vec_it >  wait_some_for(mpi_future_vec & mpi_futures,
+                                                         std::size_t us_time);
+
+    ///
+    ///  wait for 1  mpi_future object to complete
+    ///  The object return is valid and ready for a get() operation
+    ///
+    ///  the future object returned becomes invalid in the original buffer
+    ///
+    ///  Wait for a maximum of us_time microseconds, if us_time is 0. This call act as a non blocking MPI_Test
+    ///
+    /// \param mpi_futures
+    /// \return mpi_future object completed, ready for get
+    ///
+   static bool wait_any_for(
+            mpi_future_vec & mpi_futures,
+            mpi_future_vec & result, std::size_t us_time);
+
+
+    ///
+    /// return all valid mpi_futures present in mpi_futures_vec. All invalid mpi_futures are destroyed
+    ///
+    /// mpi_future_vec is purged at the end of the operation
+    ///
+    ///
+    /// \param mpi_futures
+    /// \return all valid mpi_futures contained in mpi_futures_vec
+    ///
+    static std::vector<mpi_future<Value> > filter_invalid(std::vector<mpi_future<Value> > & mpi_futures_vec);
+
+
+private:
+    Value *_v;
+    MPI_Request _req;
+    MPI_Status _status;
+    bool _valid, _completed;
+
+    inline mpi_future(Value & v, MPI_Request & req);
+    friend class mpi_comm;
+
+    inline void set_completed();
+    inline void set_validity(bool valid);
+};
+
+
 
 /**
  * @brief mpi communicator
@@ -63,139 +208,6 @@ private:
 class mpi_comm : private boost::noncopyable
 {
 public:
-
-    template<typename Value>
-    class mpi_future{
-    public:
-
-        ///
-        ///  construct a basic mpi_future
-        ///  a mpi_future object is valid() only if returned
-        ///  by an mpi asynchronous operation
-        ///
-        /// \brief mpi_future
-        ///
-        inline mpi_future();
-
-        inline mpi_future(const mpi_future<Value> & f);
-        inline mpi_future<Value> & operator=(const mpi_future<Value> & other);
-
-        inline virtual ~mpi_future();
-
-        inline Value & get();
-
-
-        ///
-        /// \brief return after the completion of the asynchronous operation
-        ///  throw a mpi_invalid_future if called on an invalid or empty mpi_future
-        ///
-        ///
-        inline void wait();
-
-
-        ///
-        /// \brief return after the completion of the asynchronous operation for
-        ///  a defined time in micro seconds. If the defined time is 0, execute a non blocking test.
-        ///
-        ///  throw a mpi_invalid_future if called on an invalid or empty mpi_future
-        ///
-        /// \return true if completion, false if timeout.
-        ///
-        inline bool wait_for(std::size_t us_time);
-
-
-        ///
-        /// Check the future validity. Only a future returned by an MPI async operation is valid.
-        /// If a valid mpi_future is copied, only the new copy is valid. The original becomes invalid.
-        ///
-        /// \return true if valid, false otherwise
-        ///
-        inline bool valid() const;
-
-        ///
-        /// \brief swap two future
-        /// \param future to swap
-        ///
-        void swap(mpi_future<Value> & other);
-
-
-        ///
-        ///  wait for a number 1 to N of mpi_future object to complete
-        ///  Every object return is valid and ready for a get() operation
-        ///
-        ///  Every future returned become invalid in the original buffer
-        ///
-        /// \param mpi_futures
-        /// \return array mpi_future objects completed, ready for get
-        ///
-        static std::vector<mpi_future<Value> > wait_some(std::vector<mpi_future<Value> > & mpi_futures);
-
-
-        ///
-        ///  wait for 1  mpi_future object to complete
-        ///  The object return is valid and ready for a get() operation
-        ///
-        ///  the future object returned becomes invalid in the original buffer
-        ///
-        /// \param mpi_futures
-        /// \return mpi_future object completed, ready for get
-        ///
-        static mpi_future<Value> wait_any(std::vector<mpi_future<Value> > & mpi_futures);
-
-        ///
-        ///  wait for a number 1 to N of mpi_future object to complete
-        ///  Every object return is valid and ready for a get() operation
-        ///
-        ///  Every future returned become invalid in the original buffer
-        ///
-        ///  Wait for a maximum of us_time microseconds, if us_time is 0. This call act as a non blocking MPI_Test
-        ///
-        /// \param mpi_futures
-        /// \return array mpi_future objects completed, ready for get
-        ///
-        static std::vector<mpi_future<Value> > wait_some_for(std::vector<mpi_future<Value> > & mpi_futures,
-                                                             std::size_t us_time);
-
-        ///
-        ///  wait for 1  mpi_future object to complete
-        ///  The object return is valid and ready for a get() operation
-        ///
-        ///  the future object returned becomes invalid in the original buffer
-        ///
-        ///  Wait for a maximum of us_time microseconds, if us_time is 0. This call act as a non blocking MPI_Test
-        ///
-        /// \param mpi_futures
-        /// \return mpi_future object completed, ready for get
-        ///
-       static bool wait_any_for(
-                std::vector<mpi_comm::mpi_future<Value> > & mpi_futures,
-                 mpi_comm::mpi_future<Value> & result, std::size_t us_time);
-
-
-        ///
-        /// return all valid mpi_futures present in mpi_futures_vec. All invalid mpi_futures are destroyed
-        ///
-        /// mpi_future_vec is purged at the end of the operation
-        ///
-        ///
-        /// \param mpi_futures
-        /// \return all valid mpi_futures contained in mpi_futures_vec
-        ///
-        static std::vector<mpi_future<Value> > filter_invalid(std::vector<mpi_future<Value> > & mpi_futures_vec);
-
-
-    private:
-        Value *_v;
-        MPI_Request _req;
-        MPI_Status _status;
-        std::bitset<8> _flags;
-
-        inline mpi_future(Value & v, MPI_Request & req);
-        friend class mpi_comm;
-
-        inline void set_completed();
-    };
-
 
     class message_handle{
     public:

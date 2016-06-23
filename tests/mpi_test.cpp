@@ -477,7 +477,7 @@ BOOST_AUTO_TEST_CASE( mpi_simple_self_async )
     mpi_comm runtime;
     std::size_t value = 42, recv_value=0;
 
-    mpi_comm::mpi_future<std::size_t> invalid_future;
+    mpi_future<std::size_t> invalid_future;
     // any not initialized future should throw if accessed
     // and be invalid
     BOOST_CHECK_EQUAL(invalid_future.valid(), false);
@@ -487,10 +487,10 @@ BOOST_AUTO_TEST_CASE( mpi_simple_self_async )
                       }, mpi_invalid_future);
 
 
-    mpi_comm::mpi_future<std::size_t> fut_recv
+    mpi_future<std::size_t> fut_recv
             = runtime.recv_async(any_source, any_tag, recv_value);
 
-    mpi_comm::mpi_future<std::size_t> fut_send
+    mpi_future<std::size_t> fut_send
             = runtime.send_async(value, runtime.rank(), 2);
 
 
@@ -530,10 +530,10 @@ BOOST_AUTO_TEST_CASE( mpi_non_blocking_self )
     runtime.barrier();
 
 
-    mpi_comm::mpi_future<std::size_t> fut_recv
+    mpi_future<std::size_t> fut_recv
             = runtime.recv_async(any_source, any_tag, recv_value);
 
-    mpi_comm::mpi_future<std::size_t> fut_send
+    mpi_future<std::size_t> fut_send
             = runtime.send_async(value, runtime.rank(), 2);
 
 
@@ -569,10 +569,10 @@ BOOST_AUTO_TEST_CASE( mpi_future_lifetime_check)
 
     runtime.barrier();
 
-    mpi_comm::mpi_future<std::size_t> other_future;
+    mpi_future<std::size_t> other_future;
 
 
-   mpi_comm::mpi_future<std::size_t> fut_recv
+   mpi_future<std::size_t> fut_recv
             = runtime.recv_async(any_source, any_tag, recv_value);
 
 
@@ -610,7 +610,7 @@ BOOST_AUTO_TEST_CASE( mpi_future_lifetime_check)
 
 
 
-   mpi_comm::mpi_future<std::size_t>
+   mpi_future<std::size_t>
            fut_send = runtime.send_async(value, runtime.rank(), 2);
 
 
@@ -624,9 +624,9 @@ BOOST_AUTO_TEST_CASE( mpi_future_lifetime_check)
 
     //
 
-    std::vector< mpi_comm::mpi_future<std::size_t> > vec_future(10);
+    std::vector< mpi_future<std::size_t> > vec_future(10);
 
-    for(std::vector<mpi_comm::mpi_future<std::size_t> >::iterator it = vec_future.begin();
+    for(std::vector<mpi_future<std::size_t> >::iterator it = vec_future.begin();
         it < vec_future.end(); ++it){
         BOOST_CHECK_EQUAL(it->valid(), false);
     }
@@ -656,10 +656,10 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_simpl)
     runtime.barrier();
 
     std::vector<std::size_t> values_send(n_send);
-    std::vector< mpi_comm::mpi_future<size_t> > send_futures(n_send);
+    std::vector< mpi_future<size_t> > send_futures(n_send);
 
     std::vector<std::size_t> values_recv(n_send, 0);
-    std::vector< mpi_comm::mpi_future<size_t> > recv_futures(n_send);
+    std::vector< mpi_future<size_t> > recv_futures(n_send);
 
     const int dest_node = (runtime.rank()+1 == runtime.size() )?(0):(runtime.rank()+1);
 
@@ -703,7 +703,7 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_some)
 
     std::vector<std::size_t> values_send(n_send);
 
-    std::vector< mpi_comm::mpi_future<size_t> > futures;
+    std::vector< mpi_future<size_t> > futures;
 
     std::vector<std::size_t> values_recv(n_send, 0);
 
@@ -717,18 +717,20 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_some)
     }
 
 
-    std::vector< mpi_comm::mpi_future<size_t> >  completed_futures;
+    std::vector< mpi_future<size_t> >  completed_futures;
 
     while(futures.size() > 0){
 
-       std::vector< mpi_comm::mpi_future<size_t> > triggered
-               = mpi_comm::mpi_future<size_t>::wait_some(futures);
+       std::vector< mpi_future<size_t>::mpi_future_vec_it > triggered
+               = mpi_future<size_t>::wait_some(futures);
 
        std::cout << "multiple_wait_some:" << triggered.size() << "\n";
 
-       completed_futures.insert(completed_futures.end(), triggered.begin(), triggered.end());
+       for(std::size_t i =0; i < triggered.size(); ++i){
+           completed_futures.push_back(*(triggered[i]));
+       }
 
-       futures = mpi_comm::mpi_future<size_t>::filter_invalid(futures);
+       futures = mpi_future<size_t>::filter_invalid(futures);
 
        std::cout << "multiple_wait_some_remaining:" << futures.size() << "\n";
     }
@@ -755,7 +757,7 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_some_for)
 
     std::vector<std::size_t> values_send(n_send);
 
-    std::vector< mpi_comm::mpi_future<size_t> > futures;
+    std::vector< mpi_future<size_t> > futures;
 
     std::vector<std::size_t> values_recv(n_send, 0);
 
@@ -769,24 +771,28 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_some_for)
     }
 
 
-    std::vector< mpi_comm::mpi_future<size_t> >  completed_futures;
+    std::vector< mpi_future<size_t> >  completed_futures;
 
     while(futures.size() > 0){
 
-       std::vector< mpi_comm::mpi_future<size_t> > triggered;
+       std::vector< mpi_future<size_t>::mpi_future_vec_it > triggered;
 
        do{
             // start non blocking and increase time
             int i=0;
-            triggered  = mpi_comm::mpi_future<size_t>::wait_some_for(futures, i);
+            triggered  = mpi_future<size_t>::wait_some_for(futures, i);
             i++;
        } while(triggered.size() == 0);
 
        std::cout << "multiple_wait_some_for:" << triggered.size() << "\n";
 
-       completed_futures.insert(completed_futures.end(), triggered.begin(), triggered.end());
 
-       futures = mpi_comm::mpi_future<size_t>::filter_invalid(futures);
+       for(std::size_t i =0; i < triggered.size(); ++i){
+           completed_futures.push_back(*(triggered[i]));
+       }
+
+
+       futures = mpi_future<size_t>::filter_invalid(futures);
 
        std::cout << "multiple_wait_some_for_remaining:" << futures.size() << "\n";
     }
@@ -814,7 +820,7 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_any)
 
     std::vector<std::size_t> values_send(n_send);
 
-    std::vector< mpi_comm::mpi_future<size_t> > futures;
+    std::vector< mpi_future<size_t> > futures;
 
     std::vector<std::size_t> values_recv(n_send, 0);
 
@@ -828,18 +834,18 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_any)
     }
 
 
-    std::vector< mpi_comm::mpi_future<size_t> >  completed_futures;
+    std::vector< mpi_future<size_t> >  completed_futures;
 
     while(futures.size() > 0){
 
-       mpi_comm::mpi_future<size_t>  my_future
-               = mpi_comm::mpi_future<size_t>::wait_any(futures);
+       mpi_future<size_t>  my_future
+               = mpi_future<size_t>::wait_any(futures);
 
        completed_futures.push_back(my_future);
 
        std::size_t pre_filter_size = futures.size();
 
-       futures = mpi_comm::mpi_future<size_t>::filter_invalid(futures);
+       futures = mpi_future<size_t>::filter_invalid(futures);
 
        BOOST_CHECK_EQUAL(futures.size(), pre_filter_size-1);
 
