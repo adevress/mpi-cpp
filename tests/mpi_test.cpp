@@ -721,16 +721,14 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_some)
 
     while(futures.size() > 0){
 
-       std::vector< mpi_future<size_t>::mpi_future_vec_it > triggered
+       std::vector< mpi_future<size_t> > new_completed_future
                = mpi_future<size_t>::wait_some(futures);
 
-       std::cout << "multiple_wait_some:" << triggered.size() << "\n";
+       std::cout << "multiple_wait_some:" << new_completed_future.size() << "\n";
 
-       for(std::size_t i =0; i < triggered.size(); ++i){
-           completed_futures.push_back(*(triggered[i]));
-       }
+       std::copy(new_completed_future.begin(), new_completed_future.end(), std::back_inserter(completed_futures));
 
-       futures = mpi_future<size_t>::filter_invalid(futures);
+       mpi_future<size_t>::filter_completed(futures);
 
        std::cout << "multiple_wait_some_remaining:" << futures.size() << "\n";
     }
@@ -775,24 +773,20 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_some_for)
 
     while(futures.size() > 0){
 
-       std::vector< mpi_future<size_t>::mpi_future_vec_it > triggered;
+       std::vector< mpi_future<size_t> > new_completed_futures;
 
        do{
             // start non blocking and increase time
             int i=0;
-            triggered  = mpi_future<size_t>::wait_some_for(futures, i);
+            new_completed_futures = mpi_future<size_t>::wait_some_for(futures, i);
             i++;
-       } while(triggered.size() == 0);
+       } while(new_completed_futures.size() == 0);
 
-       std::cout << "multiple_wait_some_for:" << triggered.size() << "\n";
+       std::cout << "multiple_wait_some_for:" << new_completed_futures.size() << "\n";
 
+       std::copy(new_completed_futures.begin(), new_completed_futures.end(), std::back_inserter(completed_futures));
 
-       for(std::size_t i =0; i < triggered.size(); ++i){
-           completed_futures.push_back(*(triggered[i]));
-       }
-
-
-       futures = mpi_future<size_t>::filter_invalid(futures);
+       mpi_future<size_t>::filter_completed(futures);
 
        std::cout << "multiple_wait_some_for_remaining:" << futures.size() << "\n";
     }
@@ -845,7 +839,7 @@ BOOST_AUTO_TEST_CASE( mpi_async_multiple_wait_any)
 
        std::size_t pre_filter_size = futures.size();
 
-       futures = mpi_future<size_t>::filter_invalid(futures);
+       mpi_future<size_t>::filter_completed(futures);
 
        BOOST_CHECK_EQUAL(futures.size(), pre_filter_size-1);
 

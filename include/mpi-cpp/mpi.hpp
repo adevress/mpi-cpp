@@ -33,9 +33,11 @@
 
 namespace mpi {
 
+template<typename Value> class mpi_future_internal;
 
 class mpi_comm;
 class mpi_scope_env;
+
 
 /**
  * @brief mpi environment scoper
@@ -56,6 +58,7 @@ private:
 };
 
 
+
 ///
 /// \brief mpi_future represent the state of an asynchronous MPI request
 ///
@@ -65,6 +68,7 @@ template<typename Value>
 class mpi_future{
 public:
 
+    typedef mpi_future<Value> mpi_future_type;
     typedef typename std::vector<mpi_future<Value> > mpi_future_vec;
     typedef typename mpi_future_vec::iterator mpi_future_vec_it;
 
@@ -83,7 +87,7 @@ public:
 
     inline virtual ~mpi_future();
 
-    inline Value & get();
+    inline Value get();
 
 
     ///
@@ -113,6 +117,14 @@ public:
     ///
     inline bool valid() const;
 
+
+    ///
+    /// Check if the operation already completed, non-blocking
+    ///
+    /// \return true if completed, false otherwise
+    ///
+    inline bool completed() const;
+
     ///
     /// \brief swap two future
     /// \param future to swap
@@ -129,7 +141,7 @@ public:
     /// \param mpi_futures
     /// \return array of iterator to completed futures
     ///
-    static std::vector< mpi_future_vec_it > wait_some(mpi_future_vec & mpi_futures);
+    static mpi_future_vec wait_some(mpi_future_vec & mpi_futures);
 
 
     ///
@@ -154,7 +166,7 @@ public:
     /// \param mpi_futures
     /// \return array of iterator to completed futures
     ///
-    static std::vector< mpi_future_vec_it >  wait_some_for(mpi_future_vec & mpi_futures,
+    static mpi_future_vec  wait_some_for(mpi_future_vec & mpi_futures,
                                                          std::size_t us_time);
 
     ///
@@ -168,34 +180,50 @@ public:
     /// \param mpi_futures
     /// \return mpi_future object completed, ready for get
     ///
-   static bool wait_any_for(
-            mpi_future_vec & mpi_futures,
-            mpi_future_vec & result, std::size_t us_time);
+   static mpi_future<Value>  wait_any_for(
+            mpi_future_vec & mpi_futures, std::size_t us_time);
 
 
     ///
-    /// return all valid mpi_futures present in mpi_futures_vec. All invalid mpi_futures are destroyed
+    /// utility function
     ///
-    /// mpi_future_vec is purged at the end of the operation
-    ///
+    /// remove all invalid futures from mpi_futures_vec
     ///
     /// \param mpi_futures
     /// \return all valid mpi_futures contained in mpi_futures_vec
     ///
-    static std::vector<mpi_future<Value> > filter_invalid(std::vector<mpi_future<Value> > & mpi_futures_vec);
+    static void filter_invalid(std::vector<mpi_future<Value> > & mpi_futures_vec);
+
+
+    ///
+    /// utility function
+    ///
+    /// remove all invalid futures from mpi_futures_vec
+    ///
+    /// \param mpi_futures
+    /// \return all valid mpi_futures contained in mpi_futures_vec
+    ///
+    static void filter_completed(std::vector<mpi_future<Value> > & mpi_futures_vec);
 
 
 private:
-    Value *_v;
-    MPI_Request _req;
-    MPI_Status _status;
-    bool _valid, _completed;
+
+
+    boost::shared_ptr< mpi_future_internal<Value> > _intern;
 
     inline mpi_future(Value & v, MPI_Request & req);
     friend class mpi_comm;
 
-    inline void set_completed();
-    inline void set_validity(bool valid);
+    template< typename Future>
+    friend void manage_completed_multiple_handle(int outcount, std::vector<int> array_indices,
+                                                 const std::vector<Future> mpi_futures,
+                                                 std::vector<Future> & completed_future);
+    template< typename Future>
+    friend void manage_completed_single_handle(int index,
+                                                    const std::vector<Future> mpi_futures,
+                                                    Future & completed_future);
+
+    MPI_Request & get_request();
 };
 
 
@@ -310,7 +338,7 @@ public:
     inline mpi_future<T> send_async(const T & local_value, int dest_node, int tag);
 
     template <typename T>
-    inline mpi_future<T> send_async(const T * value, std::size_t n_value ,
+    inline mpi_future<T*> send_async(const T * value, std::size_t n_value ,
                      int dest_node, int tag);
 
 
@@ -365,7 +393,7 @@ public:
     inline mpi_future<T> recv_async(const message_handle & handle, T & value);
 
     template <typename T>
-    inline mpi_future<T> recv_async(int src_node, int tag, T* value, std::size_t n_value);
+    inline mpi_future<T*> recv_async(int src_node, int tag, T* value, std::size_t n_value);
 
 
     /// return gathered information from all nodes

@@ -26,6 +26,7 @@
 #include <vector>
 #include <cerrno>
 #include <iostream>
+#include <limits>
 
 #include <unistd.h>
 
@@ -124,30 +125,136 @@ inline void mpi_scope_env::enable_exception_report(){
 }
 
 
+template<typename Value>
+class mpi_future_internal : boost::noncopyable {
+public:
+
+    inline mpi_future_internal(Value & v) :
+        _v(v),
+        _req(MPI_REQUEST_NULL),
+        _status(),
+        _flags(){}
+
+    inline ~mpi_future_internal(){
+        if( is_completed() == false){
+           wait();
+        }
+    }
+
+    inline void wait(){
+        if(is_completed() == false){
+            impl::_check_mpi_result(
+                        MPI_Wait(&_req, MPI_STATUS_IGNORE),
+                        EIO,
+                        "Error during MPI_Wait() in message_handle "
+            );
+            set_completed();
+        }
+    }
+
+    inline bool wait_for(std::size_t us_time){
+        int flag =0;
+        if(is_completed() == false){
+
+            do{
+                impl::_check_mpi_result(
+                            MPI_Wait(&_req, MPI_STATUS_IGNORE),
+                            EIO,
+                            "Error during MPI_Wait() in message_handle "
+                );
+
+                if(flag){
+                    set_completed();
+                    return true;
+                }
+                if(us_time ==0){
+                    return false;
+                }
+
+                us_time -= 1;
+                usleep(1);
+            } while(1);
+
+        }
+        return true;
+    }
+
+
+    inline Value get(){
+        wait();
+        return _v;
+    }
+
+
+    inline bool is_completed() const {
+        return _flags[future_completed];
+    }
+
+    inline void set_completed(){
+        _flags[future_completed] = true;
+    }
+
+    inline MPI_Request & get_ref_req(){
+        return _req;
+    }
+
+
+    Value _v;
+    MPI_Request _req;
+    MPI_Status _status;
+
+    std::bitset<8> _flags;
+
+    enum future_flags{
+        future_completed=0x1
+    };
+};
+
+template<typename Value>
+inline void check_intern_validity(const boost::shared_ptr<mpi_future_internal <Value> > & intern_ptr){
+    if(!intern_ptr){
+        throw mpi_invalid_future();
+    }
+}
+
+
+template<typename Future>
+static void manage_completed_single_handle(int index,
+                                const std::vector<Future> mpi_futures,
+                                Future & completed_future){
+    if(index >= 0){
+        assert(std::size_t(index) < mpi_futures.size());
+        completed_future = mpi_futures[index];
+        completed_future._intern->set_completed();
+    }
+}
+
+
+template<typename Future>
+static void manage_completed_multiple_handle(int outcount, std::vector<int> array_indices,
+                                const std::vector<Future> mpi_futures,
+                                std::vector<Future> & completed_future){
+    if(outcount > 0){
+        for(int i =0; i < outcount; ++i){
+            const int index = array_indices[i];
+            assert(std::size_t(index) < mpi_futures.size());
+
+            completed_future.push_back( mpi_futures[index] );
+            completed_future.back()._intern->set_completed();
+        }
+    }
+}
 
 template<typename Value>
 inline mpi_future<Value>::mpi_future() :
-    _v(),
-    _req(MPI_REQUEST_NULL),
-    _status(),
-    _valid(),
-    _completed()
+    _intern()
 {}
 
 
 template<typename Value>
 inline mpi_future<Value>::mpi_future(const mpi_future<Value> & other) :
-    _v(other._v),
-    _req(other._req),
-    _status(other._status),
-    _valid(other._valid),
-    _completed(other._completed)
+    _intern(other._intern)
 {
-    // suppress constness to invalidate old handle
-    // ugly but only way to do it without C++11 movables
-    mpi_future<Value> & var_other = const_cast<mpi_future<Value> & >(other);
-    var_other._valid = false;
-    var_other._req = MPI_REQUEST_NULL;
 
 }
 
@@ -164,104 +271,60 @@ inline mpi_future<Value> & mpi_future<Value>::operator=(const mpi_future<Value> 
 
 template<typename Value>
 inline mpi_future<Value>::~mpi_future(){
-    if(  valid()
-            && _completed == false){
-       wait();
-    }
+
 }
 
 
 template<typename Value>
-inline void mpi_future<Value>::set_completed(){
-    _completed = true;
-}
-
-template<typename Value>
-inline void mpi_future<Value>::set_validity(bool valid){
-    _valid = valid;
-}
-
-template<typename Value>
-inline Value & mpi_future<Value>::get(){
-    wait();
-
-    set_validity(false);
-    return *_v;
+inline Value mpi_future<Value>::get(){
+    Value res = _intern->get();
+    _intern.reset();
+    return res;
 }
 
 template<typename Value>
 inline void mpi_future<Value>::wait(){
-    if(!valid()){
-        throw mpi_invalid_future();
-    }
+    check_intern_validity(_intern);
+    _intern->wait();
+}
 
-    if(_completed == false){
-        impl::_check_mpi_result(
-                    MPI_Wait(&_req, MPI_STATUS_IGNORE),
-                    EIO,
-                    "Error during MPI_Wait() in message_handle "
-        );
-        set_completed();
-    }
+template<typename Value>
+inline bool mpi_future<Value>::wait_for(std::size_t us_time){
+    check_intern_validity(_intern);
+    return _intern->wait_for(us_time);
 }
 
 
 template<typename Value>
-inline bool mpi_future<Value>::wait_for(std::size_t us_time){
-    int flag = 0;
-    if(!valid()){
-        throw mpi_invalid_future();
-    }
-
-    if(_completed)
-        return true;
-
-    do{
-        impl::_check_mpi_result(
-            MPI_Test(&_req, &flag,  MPI_STATUS_IGNORE),
-            EIO,
-            "Invalid MPI_Test(): invalid mpi_future / request /  status ?"
-        );
-        if(flag){
-            set_completed();
-            return true;
-        }
-
-        if(us_time == 0){
-            return false;
-        }
-
-        usleep(1);
-        us_time -= 1;
-    }while(1);
-
-    // never reached
-    return false;
+inline MPI_Request & mpi_future<Value>::get_request(){
+    return _intern->_req;
 }
+
+
 
 
 template<typename Value>
 bool mpi_future<Value>::valid() const{
-    return _valid;
+    return _intern;
+}
+
+template<typename Value>
+bool mpi_future<Value>::completed() const{
+    check_intern_validity(_intern);
+    return _intern->is_completed();
 }
 
 
 template<typename Value>
 void mpi_future<Value>::swap(mpi_future<Value> &other){
-
-    using std::swap;
-
-    swap(_v, other._v);
-    swap(_req, other._req);
-    swap(_status, other._status);
-    swap(_valid, other._valid);
-    swap(_completed, other._completed);
+    _intern.swap(other._intern);
 }
 
-
 template<typename Value>
-std::vector< typename mpi_future<Value>::mpi_future_vec_it > mpi_future<Value>::wait_some(mpi_future<Value>::mpi_future_vec & mpi_futures){
-    std::vector< mpi_future<Value>::mpi_future_vec_it > res;
+typename std::vector<mpi_future<Value> > mpi_future<Value>::wait_some_for(typename std::vector<mpi_future<Value> > & mpi_futures,
+                                                                          std::size_t us_time){
+
+    typename std::vector<mpi_future<Value> > res;
 
     const std::size_t n_reqs = mpi_futures.size();
     int outcount=0, incount = static_cast<int>(n_reqs);
@@ -270,96 +333,53 @@ std::vector< typename mpi_future<Value>::mpi_future_vec_it > mpi_future<Value>::
         return res;
 
     std::vector<MPI_Request> reqs(n_reqs);
-    std::vector<int> array_indices(n_reqs);
+    std::vector<int> array_indices(n_reqs, -1);
     std::vector<MPI_Status> array_status(n_reqs);
 
     for(std::size_t i =0; i < n_reqs; ++i){
-        reqs[i] = mpi_futures[i]._req;
+        reqs[i] = mpi_futures[i].get_request();
     }
 
-    impl::_check_mpi_result(
-                MPI_Waitsome(incount, &(reqs[0]), &outcount, &(array_indices[0]), &(array_status[0])),
-                EIO,
-                "Error during MPI_Waitsome()");
-
-    res.reserve(outcount);
-
-    for(std::size_t i =0; i < outcount; ++i){
-        const int completed_indice = array_indices[i];
-        assert(completed_indice >=0 && completed_indice < mpi_futures.size());
-
-        mpi_future_vec_it it_completed = mpi_futures.begin();
-        std::advance(it_completed, completed_indice);
-
-        it_completed->set_completed();
-
-        res.push_back(it_completed);
-    }
-
-    return res;
-}
-
-
-template<typename Value>
-std::vector< typename mpi_future<Value>::mpi_future_vec_it  > mpi_future<Value>::wait_some_for(
-        mpi_future<Value>::mpi_future_vec & mpi_futures,
-        std::size_t us_time){
-
-    std::vector< mpi_future<Value>::mpi_future_vec_it > res;
-
-    const std::size_t n_reqs = mpi_futures.size();
-    int outcount=0, incount = static_cast<int>(n_reqs);
-
-    if(n_reqs == 0)
-        return res;
-
-    std::vector<MPI_Request> reqs(n_reqs);
-    std::vector<int> array_indices(n_reqs);
-    std::vector<MPI_Status> array_status(n_reqs);
-
-    for(std::size_t i =0; i < n_reqs; ++i){
-        reqs[i] = mpi_futures[i]._req;
-    }
-
-    do{
+    if(us_time == std::numeric_limits<std::size_t>::max()){
         impl::_check_mpi_result(
-                    MPI_Testsome(incount, &(reqs[0]), &outcount, &(array_indices[0]), &(array_status[0])),
+                    MPI_Waitsome(incount, &(reqs[0]), &outcount, &(array_indices[0]), &(array_status[0])),
                     EIO,
-                    "Error during MPI_Testsome()");
-
-        if(outcount > 0)
-            break;
-        if(us_time == 0){
-            return res;
-        }
-
-        us_time -= 1;
-        usleep(1);
-    } while(1);
+                    "Error during MPI_Waitsome()");
 
 
-    res.reserve(outcount);
+    }else{
+        do{
+            impl::_check_mpi_result(
+                        MPI_Testsome(incount, &(reqs[0]), &outcount, &(array_indices[0]), &(array_status[0])),
+                        EIO,
+                        "Error during MPI_Testsome()");
 
-    for(std::size_t i =0; i < outcount; ++i){
-        const int completed_indice = array_indices[i];
-        assert(completed_indice >=0 && completed_indice < mpi_futures.size());
+            if(outcount > 0 || us_time == 0)
+                break;
 
-        mpi_future<Value>::mpi_future_vec_it  it_completed = mpi_futures.begin();
-        std::advance(it_completed, completed_indice);
-
-        it_completed->set_completed();
-
-        res.push_back(it_completed);
+            us_time -= 1;
+            usleep(1);
+        } while(1);
     }
 
+    manage_completed_multiple_handle< mpi_future<Value> >(outcount, array_indices,
+                             mpi_futures, res);
     return res;
+
+}
+
+
+template<typename Value>
+typename std::vector<mpi_future<Value> > mpi_future<Value>::wait_some(typename std::vector<mpi_future<Value> > & mpi_futures){
+    return wait_some_for(mpi_futures, std::numeric_limits<std::size_t>::max());
 }
 
 
 
-
 template<typename Value>
-mpi_future<Value>  mpi_future<Value>::wait_any(std::vector<mpi_future<Value> > & mpi_futures){
+mpi_future<Value> mpi_future<Value>::wait_any_for(
+        typename std::vector< mpi_future<Value> > & mpi_futures,
+        std::size_t us_time){
     mpi_future<Value> res;
 
     const std::size_t n_reqs = mpi_futures.size();
@@ -369,88 +389,68 @@ mpi_future<Value>  mpi_future<Value>::wait_any(std::vector<mpi_future<Value> > &
         return res;
 
     std::vector<MPI_Request> reqs(n_reqs);
-    int index =0;
+    int index = -1, flag = 0;
     MPI_Status status;
 
     for(std::size_t i =0; i < n_reqs; ++i){
-        reqs[i] = mpi_futures[i]._req;
+        reqs[i] = mpi_futures[i].get_request();
     }
 
-    impl::_check_mpi_result(
-                MPI_Waitany(incount, &(reqs[0]), &index, &(status)),
-                EIO,
-                "Error during MPI_Waitsome()");
 
-    assert(index >= 0 && index < mpi_futures.size());
-    res = mpi_futures[index];
-    res.set_completed();
-    return res;
-}
-
-
-
-template<typename Value>
-bool  mpi_future<Value>::wait_any_for(
-        mpi_future<Value>::mpi_future_vec & mpi_futures,
-        mpi_future<Value>::mpi_future_vec & result, std::size_t us_time){
-
-    const std::size_t n_reqs = mpi_futures.size();
-    int incount = static_cast<int>(n_reqs);
-
-    if(n_reqs == 0)
-        return false;
-
-    std::vector<MPI_Request> reqs(n_reqs);
-    int index = 0, flag = 0;
-    MPI_Status status;
-
-    for(std::size_t i =0; i < n_reqs; ++i){
-        reqs[i] = mpi_futures[i]._req;
-    }
-
-    do{
+    if(us_time == std::numeric_limits<std::size_t>::max()){
         impl::_check_mpi_result(
-                    MPI_Testany(incount, &(reqs[0]), &index, &flag, &(status)),
+                    MPI_Waitany(incount, &(reqs[0]), &index, &(status)),
                     EIO,
-                    "Error during MPI_Testany()");
+                    "Error during MPI_Waitsome()");
+    }else{
+        do{
+            impl::_check_mpi_result(
+                        MPI_Testany(incount, &(reqs[0]), &index, &flag, &(status)),
+                        EIO,
+                        "Error during MPI_Testany()");
 
-        if(index > 0)
-            break;
-        if(us_time ==0){
-            return false;
-        }
+            if(index > 0 || us_time ==0){
+                break;
+            }
 
-        us_time -= 1;
-        usleep(1);
+            us_time -= 1;
+            usleep(1);
 
-    } while(1);
-
-    assert(index >= 0 && index < mpi_futures.size());
-    result = mpi_futures[index];
-    result.set_completed();
-    return true;
-}
-
-
-
-
-template<typename Value>
-std::vector<mpi_future<Value> > mpi_future<Value>::filter_invalid(std::vector<mpi_future<Value> > & mpi_futures){
-    std::vector< mpi_future<Value> > res, tmp;
-
-    tmp.swap(mpi_futures);
-    res.reserve(tmp.size());
-
-
-    for(std::size_t i =0; i < tmp.size(); ++i){
-        if(tmp[i].valid()){
-            res.push_back(tmp[i]);
-        }
+        } while(1);
     }
 
+    manage_completed_single_handle(index, mpi_futures, res);
     return res;
 }
 
+template<typename Value>
+mpi_future<Value> mpi_future<Value>::wait_any(
+        typename std::vector< mpi_future<Value> > & mpi_futures){
+    return wait_any_for(mpi_futures, std::numeric_limits<std::size_t>::max());
+}
+
+
+template<typename Value>
+bool mpi_future_is_invalid(const mpi_future<Value> & future){
+    return (!future->_intern);
+}
+
+template<typename Value>
+void mpi_future<Value>::filter_invalid(typename std::vector<mpi_future<Value> > & mpi_futures){
+    typename std::vector< mpi_future<Value> >::iterator end = std::remove_if(mpi_futures.begin(), mpi_futures.end(), mpi_future_is_invalid<Value>);
+    mpi_futures.resize(std::distance(mpi_futures.begin(), end));
+}
+
+template<typename Value>
+bool mpi_future_is_completed(const mpi_future<Value> & future){
+    return (future.completed());
+}
+
+template<typename Value>
+void mpi_future<Value>::filter_completed(typename std::vector<mpi_future<Value> > & mpi_futures){
+    typename std::vector< mpi_future<Value> >::iterator end = std::remove_if(mpi_futures.begin(), mpi_futures.end(), mpi_future_is_completed<Value>);
+    mpi_futures.resize(std::distance(mpi_futures.begin(), end));
+}
 
 
 
@@ -659,30 +659,44 @@ inline void mpi_comm::send(const T * value, std::size_t n_value ,
 
 template <typename T>
 inline mpi_future<T> mpi_comm::send_async(const T & local_value, int dest_node, int tag){
-    impl::_mpi_flaterize<T> flat_aspect(const_cast<T&>(local_value));
-
-    return send_async(flat_aspect.flat(), flat_aspect.get_flat_size(), dest_node, tag);
-}
-
-
-template <typename T>
-inline mpi_future<T> mpi_comm::send_async(const T * value, std::size_t n_value ,
-                 int dest_node, int tag){
-
     using namespace impl;
 
+    impl::_mpi_flaterize<T> flat_aspect(const_cast<T&>(local_value));
+
     mpi_future<T> fut;
+    fut._intern.reset(new mpi_future_internal<T>(const_cast<T&>(local_value)));
+
 
     impl::_check_mpi_result(
-                MPI_Isend(_to_void_pointer(value), static_cast<int>(n_value),
-                   _mpi_datatype_mapper(*value),
-                  dest_node, tag, _comm, &(fut._req)),
+                MPI_Isend(_to_void_pointer(flat_aspect.flat()), static_cast<int>(flat_aspect.get_flat_size()),
+                   _mpi_datatype_mapper(local_value),
+                  dest_node, tag, _comm, &(fut.get_request())),
                   EIO,
                  "Error during MPI_send() "
     );
 
-    fut.set_validity(true);
-    fut._v = const_cast<T *>(value);
+    return fut;
+}
+
+
+template <typename T>
+inline mpi_future<T*> mpi_comm::send_async(const T * value, std::size_t n_value ,
+                 int dest_node, int tag){
+
+    using namespace impl;
+
+    mpi_future<T*> fut;
+    fut._intern.reset(new mpi_future_internal<T*>(value));
+
+
+    impl::_check_mpi_result(
+                MPI_Isend(_to_void_pointer(value), static_cast<int>(n_value),
+                   _mpi_datatype_mapper(*value),
+                  dest_node, tag, _comm, &(fut.get_request())),
+                  EIO,
+                 "Error during MPI_send() "
+    );
+
     return fut;
 }
 
@@ -766,7 +780,16 @@ inline mpi_future<T> mpi_comm::recv_async(int src_node, int tag, T & value){
     impl::_mpi_flaterize<T> flat_aspect(value);
 
     if(flat_aspect.is_static_size()){
-        return recv_async(src_node, tag, flat_aspect.flat(), flat_aspect.get_flat_size());
+        mpi_future<T> fut;
+        fut._intern.reset(new mpi_future_internal<T>(value));
+
+        impl::_check_mpi_result(MPI_Irecv(static_cast<void*>(&value), 1,
+                                          impl::_mpi_datatype_mapper(value), src_node, tag, _comm, &(fut._intern->get_ref_req())),
+                                EIO,
+                                "Error during MPI_Irecv() "
+        );
+        return fut;
+
     }else{
         throw mpi_exception(ENOSYS, "Operation not supported now, please use probe() for variable size async recv()");
     }
@@ -797,16 +820,16 @@ inline mpi_future<T> mpi_comm::recv_async(const mpi_comm::message_handle &handle
 
 
 template <typename T>
-inline mpi_future<T> mpi_comm::recv_async(int src_node, int tag, T* value, std::size_t n_value){
-    mpi_future<T> fut;
+inline mpi_future<T*> mpi_comm::recv_async(int src_node, int tag, T* value, std::size_t n_value){
+    mpi_future<T*> fut;
+    fut._intern.reset(new mpi_future_internal<T*>(value));
 
-    impl::_check_mpi_result(MPI_Irecv(static_cast<void*>(value), n_value, impl::_mpi_datatype_mapper(*value), src_node, tag, _comm, &(fut._req)),
+    impl::_check_mpi_result(MPI_Irecv(static_cast<void*>(value), n_value,
+                                      impl::_mpi_datatype_mapper(*value), src_node, tag, _comm, &(fut._intern->get_ref_req())),
                             EIO,
                             "Error during MPI_Irecv() "
     );
 
-    fut.set_validity(true);
-    fut._v = value;
     return fut;
 }
 
