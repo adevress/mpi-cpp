@@ -224,6 +224,8 @@ private:
                                                     Future & completed_future);
 
     MPI_Request & get_request();
+
+    Value & get_value();
 };
 
 
@@ -387,10 +389,10 @@ public:
     /// @param tag identity tag
     /// @return value received
     template <typename T>
-    inline mpi_future<T> recv_async(int src_node, int tag, T & value);
+    inline mpi_future<T> recv_async(int src_node, int tag);
 
     template <typename T>
-    inline mpi_future<T> recv_async(const message_handle & handle, T & value);
+    inline mpi_future<T> recv_async(const message_handle & handle);
 
     template <typename T>
     inline mpi_future<T*> recv_async(int src_node, int tag, T* value, std::size_t n_value);

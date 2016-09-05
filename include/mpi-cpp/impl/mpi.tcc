@@ -135,6 +135,13 @@ public:
         _status(),
         _flags(){}
 
+
+    inline mpi_future_internal() :
+        _v(),
+        _req(MPI_REQUEST_NULL),
+        _status(),
+        _flags(){}
+
     inline ~mpi_future_internal(){
         if( is_completed() == false){
            wait();
@@ -158,7 +165,7 @@ public:
 
             do{
                 impl::_check_mpi_result(
-                            MPI_Wait(&_req, MPI_STATUS_IGNORE),
+                            MPI_Test(&_req, &flag, MPI_STATUS_IGNORE),
                             EIO,
                             "Error during MPI_Wait() in message_handle "
                 );
@@ -277,9 +284,11 @@ inline mpi_future<Value>::~mpi_future(){
 
 template<typename Value>
 inline Value mpi_future<Value>::get(){
-    Value res = _intern->get();
-    _intern.reset();
-    return res;
+    boost::shared_ptr< mpi_future_internal<Value> > _tmp;
+    _tmp.swap(_intern);
+
+    check_intern_validity(_tmp);
+    return _tmp->get();
 }
 
 template<typename Value>
@@ -300,6 +309,10 @@ inline MPI_Request & mpi_future<Value>::get_request(){
     return _intern->_req;
 }
 
+template<typename Value>
+inline Value & mpi_future<Value>::get_value(){
+    return _intern->_v;
+}
 
 
 
@@ -776,19 +789,21 @@ inline void mpi_comm::recv(int src_node, int tag, T* value, std::size_t n_value)
 
 
 template <typename T>
-inline mpi_future<T> mpi_comm::recv_async(int src_node, int tag, T & value){
-    impl::_mpi_flaterize<T> flat_aspect(value);
+inline mpi_future<T> mpi_comm::recv_async(int src_node, int tag){
+
+    mpi_future<T> future;
+    future._intern.reset(new mpi_future_internal<T>());
+
+    impl::_mpi_flaterize<T> flat_aspect(future.get_value());
 
     if(flat_aspect.is_static_size()){
-        mpi_future<T> fut;
-        fut._intern.reset(new mpi_future_internal<T>(value));
 
-        impl::_check_mpi_result(MPI_Irecv(static_cast<void*>(&value), 1,
-                                          impl::_mpi_datatype_mapper(value), src_node, tag, _comm, &(fut._intern->get_ref_req())),
+        impl::_check_mpi_result(MPI_Irecv(static_cast<void*>(&future.get_value()), 1,
+                                          impl::_mpi_datatype_mapper(future.get_value()), src_node, tag, _comm, &(future.get_request())),
                                 EIO,
                                 "Error during MPI_Irecv() "
         );
-        return fut;
+        return future;
 
     }else{
         throw mpi_exception(ENOSYS, "Operation not supported now, please use probe() for variable size async recv()");
@@ -796,25 +811,25 @@ inline mpi_future<T> mpi_comm::recv_async(int src_node, int tag, T & value){
 }
 
 template <typename T>
-inline mpi_future<T> mpi_comm::recv_async(const mpi_comm::message_handle &handle, T & value){
-    mpi_future<T> fut;
+inline mpi_future<T> mpi_comm::recv_async(const mpi_comm::message_handle &handle){
 
-    impl::_mpi_flaterize<T> flat_aspect(value);
+    mpi_future<T> future;
+    future._intern.reset(new mpi_future_internal<T>());
+
+    impl::_mpi_flaterize<T> flat_aspect(future.get_value());
 
     flat_aspect.resize(handle.count<typename impl::_mpi_flaterize<T>::base_type>());
 
     impl::_check_mpi_result(
                 MPI_Imrecv(static_cast<void*>(flat_aspect.flat()), handle.count<typename impl::_mpi_flaterize<T>::base_type>(),
                     impl::_mpi_datatype_mapper(*(flat_aspect.flat())),
-                    const_cast<MPI_Message*>(&(handle._msg)), &(fut._req)),
+                    const_cast<MPI_Message*>(&(handle._msg)), &(future.get_request())),
                 EIO,
                 "Error during MPI_Imrecv() "
     );
 
 
-    fut.set_validity(true);
-    fut._v = &value;
-    return fut;
+    return future;
 
 }
 
