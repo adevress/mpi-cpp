@@ -30,6 +30,7 @@
 
 #include <unistd.h>
 
+#include <boost/shared_ptr.hpp>
 #include <boost/array.hpp>
 
 #include "../mpi.hpp"
@@ -318,7 +319,7 @@ inline Value & mpi_future<Value>::get_value(){
 
 template<typename Value>
 bool mpi_future<Value>::valid() const{
-    return _intern;
+    return (_intern.get() != NULL);
 }
 
 template<typename Value>
