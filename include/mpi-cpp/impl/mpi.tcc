@@ -32,6 +32,8 @@
 
 #include <boost/shared_ptr.hpp>
 #include <boost/array.hpp>
+#include <boost/thread.hpp>
+#include <boost/chrono.hpp>
 
 #include "../mpi.hpp"
 #include "../mpi_exception.hpp"
@@ -42,6 +44,10 @@
 namespace mpi{
 
 namespace impl{
+
+inline void thread_sleep_us(size_t time){
+    boost::this_thread::sleep_for(boost::chrono::microseconds(time));
+}
 
 
 inline std::string thread_opt_string(int opt_string){
@@ -180,7 +186,7 @@ public:
                 }
 
                 us_time -= 1;
-                usleep(1);
+                impl::thread_sleep_us(1);
             } while(1);
 
         }
@@ -372,7 +378,7 @@ typename std::vector<mpi_future<Value> > mpi_future<Value>::wait_some_for(typena
                 break;
 
             us_time -= 1;
-            usleep(1);
+            impl::thread_sleep_us(1);
         } while(1);
     }
 
@@ -428,7 +434,7 @@ mpi_future<Value> mpi_future<Value>::wait_any_for(
             }
 
             us_time -= 1;
-            usleep(1);
+            impl::thread_sleep_us(1);
 
         } while(1);
     }
@@ -741,7 +747,7 @@ inline mpi_comm::message_handle mpi_comm::probe(int src_node, int tag, std::size
             break;
         }
 
-        usleep(1);
+        impl::thread_sleep_us(1);
         us_time -=1;
     }while(1);
 

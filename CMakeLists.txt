@@ -21,6 +21,8 @@ include(DefineInstallationPaths)
 include(ReleaseDebugAutoFlags)
 
 find_package(MPI)
+find_package(Boost 1.41.0 REQUIRED system thread)
+
 
 
 file(GLOB MPI_CPP_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/include/mpi-cpp/*)
