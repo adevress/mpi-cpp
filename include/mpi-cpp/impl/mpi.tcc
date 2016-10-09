@@ -193,12 +193,18 @@ public:
         return true;
     }
 
-
+#ifdef _MPI_CPP_USE_CXX11
+    inline Value get() {
+        wait();
+        return std::move(_v);
+    }
+#else
     inline Value get(){
         wait();
         return _v;
     }
 
+#endif
 
     inline bool is_completed() const {
         return _flags[future_completed];
@@ -224,9 +230,9 @@ public:
     };
 };
 
-template<typename Value>
-inline void check_intern_validity(const boost::shared_ptr<mpi_future_internal <Value> > & intern_ptr){
-    if(!intern_ptr){
+template<typename ShrPtr>
+inline void check_intern_validity(const ShrPtr & intern_ptr){
+    if(intern_ptr.get() == NULL){
         throw mpi_invalid_future();
     }
 }
@@ -288,15 +294,31 @@ inline mpi_future<Value>::~mpi_future(){
 
 }
 
+#if _MPI_CPP_USE_CXX11
 
 template<typename Value>
 inline Value mpi_future<Value>::get(){
-    boost::shared_ptr< mpi_future_internal<Value> > _tmp;
+    util::shared_ptr< mpi_future_internal<Value> > _tmp;
     _tmp.swap(_intern);
 
     check_intern_validity(_tmp);
     return _tmp->get();
 }
+
+
+
+#else
+
+template<typename Value>
+inline Value mpi_future<Value>::get(){
+    util::shared_ptr< mpi_future_internal<Value> > _tmp;
+    _tmp.swap(_intern);
+
+    check_intern_validity(_tmp);
+    return _tmp->get();
+}
+
+#endif
 
 template<typename Value>
 inline void mpi_future<Value>::wait(){

@@ -29,6 +29,7 @@
 
 #include <mpi.h>
 
+#include "impl/mpi_cpp_config.hpp"
 #include "mpi_exception.hpp"
 
 
@@ -89,8 +90,6 @@ public:
     inline virtual ~mpi_future();
 
     inline Value get();
-
-
     ///
     /// \brief return after the completion of the asynchronous operation
     ///  throw a mpi_invalid_future if called on an invalid or empty mpi_future
@@ -210,7 +209,7 @@ public:
 private:
 
 
-    boost::shared_ptr< mpi_future_internal<Value> > _intern;
+    util::shared_ptr< mpi_future_internal<Value> > _intern;
 
     inline mpi_future(Value & v, MPI_Request & req);
     friend class mpi_comm;
