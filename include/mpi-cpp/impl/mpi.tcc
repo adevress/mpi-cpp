@@ -142,6 +142,12 @@ public:
         _status(),
         _flags(){}
 
+    inline mpi_future_internal(Value * v) :
+        _v(*v),
+        _req(MPI_REQUEST_NULL),
+        _status(),
+        _flags(){}
+
 
     inline mpi_future_internal() :
         _v(),
@@ -728,7 +734,7 @@ inline mpi_future<T*> mpi_comm::send_async(const T * value, std::size_t n_value 
     using namespace impl;
 
     mpi_future<T*> fut;
-    fut._intern.reset(new mpi_future_internal<T*>(value));
+    fut._intern.reset(new mpi_future_internal<T*>(const_cast<T**>(&value)));
 
 
     impl::_check_mpi_result(

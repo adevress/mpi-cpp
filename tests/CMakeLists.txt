@@ -30,3 +30,6 @@ add_test(NAME MpiTest_unit COMMAND ${TEST_MPI_EXEC_PREFIX} ${CMAKE_CURRENT_BINAR
 
 
 endif()
+
+add_subdirectory(perf)
+

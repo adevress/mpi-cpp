@@ -7,6 +7,7 @@ set(VERSION_MAJOR "0")
 set(VERSION_MINOR "1")
 
 option(UNIT_TESTS "Enable or disable unit tests execution" TRUE)
+option(PERF_TESTS "Enable or disable perf tests execution" TRUE)
 option(MPI_CPP_DISABLE_INSTALL "Disable the installation for this component" FALSE)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake
