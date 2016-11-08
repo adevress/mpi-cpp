@@ -1,12 +1,14 @@
 ##
 ## Portability check on Blue Gene Q environment
 
-if(IS_DIRECTORY "/bgsys")
+include(CompilerFlagsHelpers)
+
+if(IS_DIRECTORY "/bgsys" AND (NOT DEFINED BLUEGENE) )
     set(BLUEGENE TRUE)
 endif()
 
 
-if(BLUEGENE)
+if(BLUEGENE AND CMAKE_C_COMPILER_IS_XLC )
 	# define library type to static on BGQ
 	set(COMPILE_LIBRARY_TYPE "STATIC")
 	## Blue Gene/Q do not support linking with MPI library when compiled with mpicc wrapper
@@ -18,13 +20,11 @@ if(BLUEGENE)
 	## static linking need to be forced on BlueGene
 	# Boost need a bit of tuning parameters for static linking
 	set(Boost_NO_BOOST_CMAKE TRUE)
-    	set(Boost_USE_STATIC_LIBS TRUE)	
+    set(Boost_USE_STATIC_LIBS TRUE)	
 
 	#enforce static linking for hdf5
 	set(HDF5_USE_STATIC_LIBRARIES TRUE)
 
-	## enforce static library discovery for modules
-	set(CMAKE_EXE_LINKER_FLAGS "-static")
 else()
 
 if(NOT DEFINED COMPILE_LIBRARY_TYPE)

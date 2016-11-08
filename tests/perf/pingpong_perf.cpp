@@ -102,7 +102,7 @@ void synchronous_dynqmic_execute_ping_pong(exec_context & c){
         }
 
        auto stop = std::chrono::system_clock::now();
-       double time_us = double(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) / 1000.0 ;
+       double time_us = double(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) / 1000.0 / 2.0;
        c.min_time = std::min(c.min_time, time_us);
        c.max_time = std::max(c.max_time, time_us);
        c.av_time += time_us;
@@ -150,7 +150,7 @@ void synchronous_fixed_execute_ping_pong(exec_context & c){
         }
 
        auto stop = std::chrono::system_clock::now();
-       double time_us = double(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) / 1000.0 ;
+       double time_us = double(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) / 1000.0 / 2.0 ;
        c.min_time = std::min(c.min_time, time_us);
        c.max_time = std::max(c.max_time, time_us);
        c.av_time += time_us;
@@ -210,7 +210,7 @@ void asynchronous_fixed_execute_ping_pong(exec_context & c){
         }
 
        auto stop = std::chrono::system_clock::now();
-       double time_us = double(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) / 1000.0 ;
+       double time_us = double(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) / 1000.0 / 2.0 ;
        c.min_time = std::min(c.min_time, time_us);
        c.max_time = std::max(c.max_time, time_us);
        c.av_time += time_us;
@@ -248,7 +248,10 @@ void asynchronous_dynamic_execute_ping_pong(exec_context & c){
 
             auto fut_send = comm.send_async(elems, 1, 42);
 
-            auto msg_handle = comm.probe(mpi::any_source, mpi::any_tag);
+            mpi::mpi_comm::message_handle  msg_handle;
+			do{
+				msg_handle  = comm.probe(mpi::any_source, mpi::any_tag, 1);
+			}while(msg_handle.is_valid() == false);
 
             auto fut_recv = comm.recv_async<vector_elems>(msg_handle);
             total += elems_res.size();
@@ -258,8 +261,14 @@ void asynchronous_dynamic_execute_ping_pong(exec_context & c){
 
         }else if(comm.rank() == 1){
 
-            auto msg_handle = comm.probe(mpi::any_source, mpi::any_tag);
-            auto fut_recv = comm.recv_async<vector_elems>(msg_handle);
+
+            mpi::mpi_comm::message_handle  msg_handle;
+   			do{
+				msg_handle  = comm.probe(mpi::any_source, mpi::any_tag, 1);
+			}while(msg_handle.is_valid() == false);
+     
+
+			auto fut_recv = comm.recv_async<vector_elems>(msg_handle);
 
             fut_recv.wait();
 
@@ -272,7 +281,7 @@ void asynchronous_dynamic_execute_ping_pong(exec_context & c){
         }
 
        auto stop = std::chrono::system_clock::now();
-       double time_us = double(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) / 1000.0 ;
+       double time_us = double(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) / 1000.0 / 2.0;
        c.min_time = std::min(c.min_time, time_us);
        c.max_time = std::max(c.max_time, time_us);
        c.av_time += time_us;

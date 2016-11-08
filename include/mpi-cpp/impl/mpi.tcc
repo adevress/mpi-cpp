@@ -32,12 +32,20 @@
 
 #include <boost/shared_ptr.hpp>
 #include <boost/array.hpp>
+
+#if _MPI_CPP_USE_CXX11 == 0
 #include <boost/thread.hpp>
 #include <boost/chrono.hpp>
+#else
+#include <thread>
+#include <chrono>
+#endif
+
 
 #include "../mpi.hpp"
 #include "../mpi_exception.hpp"
 
+#include "mpi_cpp_config.hpp"
 
 #include "mpi_type_mapper.hpp"
 
@@ -46,7 +54,11 @@ namespace mpi{
 namespace impl{
 
 inline void thread_sleep_us(size_t time){
+#if _MPI_CPP_USE_CXX11 == 0
     boost::this_thread::sleep_for(boost::chrono::microseconds(time));
+#else
+	std::this_thread::sleep_for(std::chrono::microseconds(time));
+#endif 
 }
 
 
