@@ -1,7 +1,7 @@
 #ifndef MPI_CPP_CONFIG_HPP
 #define MPI_CPP_CONFIG_HPP
 
-#if __cplusplus >= 20011L
+#if __cplusplus >=  201103L  
 #ifndef _MPI_CPP_USE_CXX11
 #define _MPI_CPP_USE_CXX11 1
 #else
@@ -31,7 +31,8 @@ using namespace boost;
 
 #else
 
-using namespace std;
+template<typename Type>
+using shared_ptr = std::shared_ptr<Type>;
 
 #endif
 

@@ -24,7 +24,6 @@
 #include <vector>
 #include <bitset>
 #include <string>
-#include <boost/shared_ptr.hpp>
 #include <boost/noncopyable.hpp>
 
 #include <mpi.h>
