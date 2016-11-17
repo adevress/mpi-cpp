@@ -540,7 +540,7 @@ template<typename T>
 inline std::size_t mpi_comm::message_handle::count() const{
     int count=0;
     impl::_check_mpi_result(
-        MPI_Get_count(&_status, impl::_mpi_datatype_mapper(T()), &count),
+        MPI_Get_count(const_cast<MPI_Status*>(&_status), impl::_mpi_datatype_mapper(T()), &count),
         EIO,
         "Error during MPI_Get_count() in message_handle "
     );
