@@ -18,6 +18,7 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake
 set(Boost_NO_BOOST_CMAKE TRUE)
 
 include(BlueGenePortability)
+include(CrayPortability)
 include(DefineInstallationPaths)
 include(ReleaseDebugAutoFlags)
 
