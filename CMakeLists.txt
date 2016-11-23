@@ -25,6 +25,9 @@ include(ReleaseDebugAutoFlags)
 find_package(MPI)
 find_package(Boost 1.41.0 REQUIRED system thread)
 
+if(BLUEGENE)
+	add_definitions( -DMPI_FORCE_LEGACY=1 -D_GLIBCXX_USE_NANOSLEEP=1)
+endif()
 
 
 file(GLOB MPI_CPP_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/include/mpi-cpp/*)

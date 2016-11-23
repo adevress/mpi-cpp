@@ -4,7 +4,7 @@ if(UNIT_TESTS)
 
 include(TestHelpers)
 
-find_package(Boost 1.41.0 REQUIRED unit_test_framework)
+find_package(Boost 1.41.0 REQUIRED unit_test_framework system thread)
 
 if(NOT Boost_USE_STATIC_LIBS)
         add_definitions(-DBOOST_TEST_DYN_LINK=TRUE)
