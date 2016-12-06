@@ -36,7 +36,7 @@ void execute_iter(const std::string name, Func & fun){
     comm.barrier();
 
     if(comm.rank() == 0) {
-        std::cout << " " << name << "\n";
+        std::cout << " " << name << " on " << comm.size() << " ranks \n";
 
         std::cout << "\t\t#bytes\t\t#repetitions\t\tt[usec]\t\tmint[usec]\t\tmaxt[usec]\t\tMbytes/sec\n";
     }
@@ -57,12 +57,11 @@ void execute_iter(const std::string name, Func & fun){
                   << "\t\t" << context.min_time
                   << "\t\t" << context.max_time
                   << "\t\t" << (context.elem_size) / ( context.av_time )
-                  << "\n";
+                  << std::endl ;
         }
         elem_size= (elem_size == 0 ) ? 1 : (elem_size << 1);
     }
 
-    std::cout << std::endl;
 
     comm.barrier();
 
