@@ -43,7 +43,7 @@ int MPI_Improbe(int source, int tag, MPI_Comm comm,
 
 // unsafe Imrecv
 inline int MPI_Imrecv(void *buf, int count, MPI_Datatype datatype, MPI_Message *message, MPI_Request *request){
-	return MPI_Irecv(buf, count, datatype, message->__tag, message->__source, message->__comm, request);
+	return MPI_Irecv(buf, count, datatype, message->__source, message->__tag, message->__comm, request);
 }
 
 // unsafe Mrecv
