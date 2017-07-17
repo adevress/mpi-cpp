@@ -26,6 +26,15 @@
 #include <string>
 #include <boost/noncopyable.hpp>
 
+// excepted if disable explicitely
+// remove openmpi CXX bindings requirement
+#ifndef MPI_CPP_LEGACY_DISABLE
+#   ifndef OMPI_SKIP_MPICXX
+#       define OMPI_SKIP_MPICXX
+#   endif
+#endif
+
+
 #include <mpi.h>
 
 #include "impl/mpi_cpp_config.hpp"
@@ -47,6 +56,7 @@ class mpi_scope_env;
  */
 class mpi_scope_env : private boost::noncopyable{
 public:
+
     inline mpi_scope_env(int* argc, char*** argv);
 
     inline virtual ~mpi_scope_env();

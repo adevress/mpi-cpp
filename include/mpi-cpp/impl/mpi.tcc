@@ -123,8 +123,13 @@ mpi_scope_env::mpi_scope_env(int *argc, char ***argv) : initialized(false){
                     std::string("Unable to init MPI with ") + impl::thread_opt_string(thread_support));
 
         if(provided != thread_support){
-            std::cerr << "mpi_scope_env(MPI_Init_thread): MPI Thread level provided (" << impl::thread_opt_string(provided)
-                         << ") different of required (" << impl::thread_opt_string(thread_support) << ")\n";
+            int rank;
+            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+            if(rank == 0){
+                std::cerr << "mpi_scope_env(MPI_Init_thread): MPI Thread level provided (" << impl::thread_opt_string(provided)
+                             << ") different of required (" << impl::thread_opt_string(thread_support) << ")\n";
+            }
         }
     }
 }
